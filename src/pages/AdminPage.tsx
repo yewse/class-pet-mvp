@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   adminAddClass,
   adminAddTeacher,
+  adminDeleteTeacher,
   adminOverview,
   adminRenameSchool,
   adminResetTeacherPassword,
@@ -234,6 +235,20 @@ function TeachersTab({ data, onChanged }: { data: AdminOverview; onChanged: () =
                         }
                       >
                         {t.active ? '停用' : '启用'}
+                      </button>
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => {
+                          if (window.confirm(`确认删除教师 ${t.name}？账号立即失效`)) {
+                            void adminDeleteTeacher(t.id).then(async (err) => {
+                              showToast(err ?? `已删除 ${t.name}`, err ? 'err' : 'ok')
+                              if (!err) await onChanged()
+                            })
+                          }
+                        }}
+                      >
+                        删除
                       </button>
                     </div>
                   </td>

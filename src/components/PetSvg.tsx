@@ -259,7 +259,15 @@ export function PetSvg(props: {
   const stage = props.stage ?? (props.growth == null ? '成' : props.growth < 20 ? '幼' : props.growth < 48 ? '少' : '成')
   const stageScale = stage === '幼' ? 0.72 : stage === '少' ? 0.88 : 1
   const c = mix(props.species, props.paletteId)
-  const f = props.face
+  const f = props.face ?? {
+    eye_size: 50,
+    eye_spacing: 50,
+    muzzle_length: 50,
+    ear_tilt: 50,
+    brow_height: 50,
+    cheek: 50,
+    body_round: 50,
+  }
   const size = props.compact ? 132 : 196
   const bodyR = 38 + (f.body_round - 50) * 0.16
   const eyeS = 5.5 + f.eye_size * 0.055

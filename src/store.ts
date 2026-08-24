@@ -349,6 +349,7 @@ export const adminResetTeacherPassword = (teacherId: string, password: string) =
   adminPost('/admin/reset-teacher-password', { teacherId, password })
 export const adminSetTeacherActive = (teacherId: string, active: boolean) =>
   adminPost('/admin/set-teacher-active', { teacherId, active })
+export const adminDeleteTeacher = (teacherId: string) => adminPost('/admin/delete-teacher', { teacherId })
 export const adminSaveRules = (rules: RuleConfig) => adminPost('/admin/rules', { rules })
 export const adminRenameSchool = (name: string) => adminPost('/admin/school-name', { name })
 

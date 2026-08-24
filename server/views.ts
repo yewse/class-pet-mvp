@@ -1,5 +1,6 @@
 import type { AppState } from '../src/types'
 import { classOkrProgress } from '../src/engine'
+import { assignMissingSeats, classLayoutOf } from '../src/engine/mutations'
 import { mondayOfWeekId, weekIdOf } from '../src/rules'
 import { weekActiveStudents, type AccountRow, type ClassRow } from './db'
 
@@ -26,14 +27,17 @@ export function teacherView(
   activeClassId: string,
 ): AppState {
   const week = weekIdOf(state)
-  return {
+  const layout = classLayoutOf(state)
+  const updatedState = {
     ...base(state, schoolName, classes, activeClassId),
+    users: assignMissingSeats(state.users, layout),
     derived: {
       classPct: classOkrProgress(state),
       weekActiveStudents: weekActiveStudents(activeClassId, mondayOfWeekId(week)),
       rosterCount: state.users.filter((u) => u.role === 'student').length,
     },
   }
+  return updatedState
 }
 
 export function studentView(
