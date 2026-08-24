@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { AdoptCeremony } from '../components/AdoptCeremony'
 import { PetSvg } from '../components/PetSvg'
-import { balance, feedPet, petDisplayName, petPet, tapPet } from '../store'
+import { balance, feedPet, personalOkrOf, petDisplayName, petPet, setStudentObjective, tapPet } from '../store'
 import { DAILY_EARN_CAP, DAILY_SPEND_CAP, ITEM_LABEL, displayLedgerReason } from '../types'
 import { ACHIEVEMENTS, dayEarn, daySpendAbs, isClassHourLocked, todayStr } from '../rules'
 import { showToast } from '../toast'
@@ -23,6 +23,8 @@ export function HomePage({
   const pet = state.pets.find((p) => p.ownerId === studentId)
   const today = todayStr(state)
   const [replay, setReplay] = useState(false)
+  const okr = personalOkrOf(state, studentId)
+  const [myO, setMyO] = useState(okr.objective)
   const locked = isClassHourLocked(state, studentId)
   if (!pet) {
     return <p>尚未领养，将进入领养。</p>
@@ -81,9 +83,23 @@ export function HomePage({
       </div>
       <div className="home-meta">
         <p>
-          心情 {pet.mood} · 饱食 {pet.hunger} · 养成积分 {balance(state, studentId)} · 课堂分{' '}
-          {state.classScores?.[studentId] ?? 0}
+          心情 {pet.mood} · 饱食 {pet.hunger} · 养成积分 {balance(state, studentId)}
         </p>
+        <p>
+          本周目标 {okr.objective || '未设'} · 进度 {okr.krDone}/{okr.krTarget}（只和自己比）
+        </p>
+        {!readonly && (
+          <form
+            className="row"
+            onSubmit={(e) => {
+              e.preventDefault()
+              showToast(setStudentObjective(studentId, myO) ?? '已保存本周目标')
+            }}
+          >
+            <input value={myO} onChange={(e) => setMyO(e.target.value)} maxLength={16} aria-label="本周目标" />
+            <button type="submit" className="primary">保存目标</button>
+          </form>
+        )}
         <p className="muted">
           今日入账 {dayEarn(state, studentId, today)}/{DAILY_EARN_CAP} · 消耗{' '}
           {daySpendAbs(state, studentId, today)}/{DAILY_SPEND_CAP}
@@ -105,7 +121,7 @@ export function HomePage({
           </div>
         )}
         {locked && <p className="lock-banner">{CLASS_CARE}</p>}
-        <p className="muted">当日至少照料一次（抚摸或喂食）成长 +8。轻点不计照料。</p>
+        <p className="muted">当日个人关键结果每新增一格，成长 +8。大屏乱点不加成长。</p>
         <h3>流水</h3>
         <ul className="home-led">
           {state.ledger

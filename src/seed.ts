@@ -1,4 +1,5 @@
 import type { AppState, FacePreset, Pet, User } from './types'
+import { DEFAULT_KR_TARGET } from './types'
 import { basePetForSpecies } from './catalog'
 import { MOUNT_ID } from './types'
 import { addDays, weekIdFromDate } from './rules'
@@ -282,6 +283,14 @@ export function createSeed(): AppState {
     lastSettledWeek: prevWeek,
     session: null,
     todayOverride: today,
-    classScores: { s1: 6, s2: 4, s3: 3, s4: 2 },
+    classScores: { s1: 0, s2: 0, s3: 0, s4: 0 },
+    personalOkrs: {
+      s1: { weekId: week, objective: '本周订正全做完', krTarget: DEFAULT_KR_TARGET, krDone: 2, lastTickDate: '2026-08-23' },
+      s2: { weekId: week, objective: '晚自习专注四次', krTarget: DEFAULT_KR_TARGET, krDone: 1, lastTickDate: null },
+      s3: { weekId: week, objective: '本周订正全做完', krTarget: DEFAULT_KR_TARGET, krDone: 0, lastTickDate: null },
+      s4: { weekId: week, objective: '晚自习专注四次', krTarget: DEFAULT_KR_TARGET, krDone: 1, lastTickDate: null },
+    },
+    classOkr: { weekId: week, objective: '作业准时率', doneCount: 1 },
+    classSession: { active: false, deltas: {}, classKrMoved: false },
   }
 }

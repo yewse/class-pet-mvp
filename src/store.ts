@@ -1,7 +1,7 @@
 import { createSeed, SHOP_ITEMS } from './seed'
-import type { AppState, ClassLayout, Expression, FacePreset, Pet, ReportCategory, Seat, SpeciesId } from './types'
+import type { AppState, ClassLayout, ClassOkr, ClassSession, Expression, FacePreset, PersonalOkr, Pet, ReportCategory, Seat, SpeciesId } from './types'
 import { DEFAULT_LAYOUT, seatKey } from './types'
-import { SKIN_TO_CLOTHES } from './types'
+import { SKIN_TO_CLOTHES, DEFAULT_KR_TARGET, SESSION_POS_CAP, SESSION_NEG_CAP } from './types'
 import { BASE_PETS, basePetById, basePetForSpecies, COSMETICS, cosmeticById } from './catalog'
 import {
   CATEGORY_POINTS,
@@ -30,7 +30,7 @@ import {
 } from './rules'
 import type { HonorItem, HonorTier } from './types'
 
-const KEY = 'class-pet-mvp-v8'
+const KEY = 'class-pet-mvp-v9'
 
 const ONLY_CLASS = 'c1'
 
@@ -75,6 +75,60 @@ function normalizePet(p: Pet): Pet {
   }
 }
 
+
+const FALLBACK_O = ['本周订正全做完', '晚自习专注四次']
+
+export function emptyPersonalOkr(weekId: string, objective = ''): PersonalOkr {
+  return { weekId, objective, krTarget: DEFAULT_KR_TARGET, krDone: 0, lastTickDate: null }
+}
+
+export function personalOkrOf(s: AppState, studentId: string): PersonalOkr {
+  const week = weekIdOf(s)
+  const raw = s.personalOkrs?.[studentId]
+  if (!raw) return emptyPersonalOkr(week)
+  if (raw.weekId !== week) return { ...emptyPersonalOkr(week), objective: raw.objective }
+  return {
+    weekId: week,
+    objective: raw.objective ?? '',
+    krTarget: Math.max(1, raw.krTarget || DEFAULT_KR_TARGET),
+    krDone: Math.max(0, raw.krDone ?? 0),
+    lastTickDate: raw.lastTickDate ?? null,
+  }
+}
+
+export function classOkrOf(s: AppState): ClassOkr {
+  const week = weekIdOf(s)
+  const raw = s.classOkr
+  if (!raw || raw.weekId !== week) {
+    return { weekId: week, objective: raw?.objective || '作业准时率', doneCount: 0 }
+  }
+  return { weekId: week, objective: raw.objective || '作业准时率', doneCount: Math.max(0, raw.doneCount ?? 0) }
+}
+
+export function classOkrProgress(s: AppState): number {
+  const roster = s.users.filter((u) => u.role === 'student' && u.classId === ONLY_CLASS).length
+  if (!roster) return 0
+  return Math.min(100, Math.round((classOkrOf(s).doneCount / roster) * 100))
+}
+
+function syncOkrs(s: AppState): AppState {
+  const week = weekIdOf(s)
+  const personalOkrs: Record<string, PersonalOkr> = { ...(s.personalOkrs ?? {}) }
+  let i = 0
+  for (const u of s.users.filter((x) => x.role === 'student')) {
+    const cur = personalOkrs[u.id]
+    if (!cur) {
+      personalOkrs[u.id] = emptyPersonalOkr(week, FALLBACK_O[i % FALLBACK_O.length])
+    } else if (cur.weekId !== week) {
+      personalOkrs[u.id] = { ...emptyPersonalOkr(week), objective: cur.objective }
+    }
+    i += 1
+  }
+  const classOkr = classOkrOf({ ...s, personalOkrs })
+  const classSession: ClassSession = s.classSession ?? { active: false, deltas: {}, classKrMoved: false }
+  return { ...s, personalOkrs, classOkr, classSession }
+}
+
 function migrate(s: AppState): AppState {
   const seed = createSeed()
   const savedById = new Map((s.users ?? []).map((u) => [u.id, u]))
@@ -109,7 +163,7 @@ function migrate(s: AppState): AppState {
   const session = s.session
     ? { userId: s.session.userId, viewClassId: ONLY_CLASS }
     : null
-  return {
+  return syncOkrs({
     ...s,
     schoolName: s.schoolName ?? seed.schoolName,
     className: seed.className,
@@ -123,7 +177,10 @@ function migrate(s: AppState): AppState {
     activeWeek: s.activeWeek ?? seed.activeWeek,
     lastSettledWeek: s.lastSettledWeek === undefined ? seed.lastSettledWeek : s.lastSettledWeek,
     classScores,
-  }
+    personalOkrs: s.personalOkrs ?? seed.personalOkrs,
+    classOkr: s.classOkr ?? seed.classOkr,
+    classSession: s.classSession ?? seed.classSession,
+  })
 }
 
 function load(): AppState {
@@ -379,6 +436,7 @@ export function addStudent(name: string): string | null {
     ...state,
     users: [...state.users, { id, name: n, role: 'student', code: 'student', classId: ONLY_CLASS, dnd: false, seat }],
     classScores: { ...state.classScores, [id]: 0 },
+    personalOkrs: { ...state.personalOkrs, [id]: emptyPersonalOkr(weekIdOf(state), FALLBACK_O[0]) },
   })
   return null
 }
@@ -405,6 +463,7 @@ export function deleteStudent(studentId: string): string | null {
     ...state,
     users: state.users.filter((u) => u.id !== studentId),
     classScores,
+    personalOkrs: Object.fromEntries(Object.entries(state.personalOkrs ?? {}).filter(([k]) => k !== studentId)),
   })
   return null
 }
@@ -806,36 +865,161 @@ export function transferBlocked() {
 }
 
 
-export const CLASS_REASONS = ['发言', '作业', '互助', '纪律'] as const
+export const CLASS_REASONS = ['推进个人目标', '帮助班级目标', '走神提醒'] as const
+export type ClassReason = (typeof CLASS_REASONS)[number]
 
 export function classScoreOf(studentId: string): number {
-  return state.classScores?.[studentId] ?? 0
+  return personalOkrOf(state, studentId).krDone
 }
 
-/** 课堂分：不受每日 8 分养成上限 */
-export function adjustClassScore(studentId: string, delta: number, reason: string): string | null {
-  const u = state.users.find((x) => x.id === studentId)
-  if (!u || u.role !== 'student') return '只能给学生记课堂分'
-  const today = todayStr(state)
-  const next = Math.max(0, (state.classScores?.[studentId] ?? 0) + delta)
-  const pets = state.pets.map((p) => {
-    if (p.ownerId !== studentId) return p
-    const mood = Math.max(0, Math.min(100, p.mood + (delta > 0 ? 4 : -6)))
-    return { ...p, mood, expression: (delta > 0 ? 'cheer' : 'tired') as Expression }
-  })
+export function sessionDeltaOf(studentId: string): number {
+  return state.classSession?.deltas?.[studentId] ?? 0
+}
+
+function ensureSession(s: AppState): AppState {
+  if (s.classSession?.active) return s
+  return {
+    ...s,
+    classSession: { active: true, deltas: {}, classKrMoved: false },
+    inClassHour: { ...s.inClassHour, [ONLY_CLASS]: true },
+  }
+}
+
+export function startClassSession(): string | null {
+  if (state.classSession?.active) return '本课已开始'
+  set(ensureSession(state))
+  return null
+}
+
+export function endClassSession(): string | null {
   set({
     ...state,
-    classScores: { ...state.classScores, [studentId]: next },
+    classSession: { active: false, deltas: {}, classKrMoved: false },
+    inClassHour: { ...state.inClassHour, [ONLY_CLASS]: false },
+  })
+  return null
+}
+
+function applySessionCap(s: AppState, studentId: string, delta: number): string | null {
+  const used = s.classSession?.deltas?.[studentId] ?? 0
+  const next = used + delta
+  if (next > SESSION_POS_CAP) return `本课最多加 ${SESSION_POS_CAP}`
+  if (next < -SESSION_NEG_CAP) return `本课最多减 ${SESSION_NEG_CAP}`
+  return null
+}
+
+export function setStudentObjective(studentId: string, objective: string): string | null {
+  const u = state.users.find((x) => x.id === studentId)
+  if (!u || u.role !== 'student') return '只能改学生目标'
+  const o = objective.trim()
+  if (!o) return '目标不能为空'
+  if (o.length > 16) return '目标请控制在 16 字内'
+  const cur = personalOkrOf(state, studentId)
+  set({
+    ...state,
+    personalOkrs: { ...state.personalOkrs, [studentId]: { ...cur, objective: o } },
+  })
+  return null
+}
+
+export function setStudentKrTarget(studentId: string, n: number): string | null {
+  const u = state.users.find((x) => x.id === studentId)
+  if (!u || u.role !== 'student') return '只能改学生关键结果'
+  const t = Math.max(1, Math.min(12, Math.round(n) || DEFAULT_KR_TARGET))
+  const cur = personalOkrOf(state, studentId)
+  set({
+    ...state,
+    personalOkrs: { ...state.personalOkrs, [studentId]: { ...cur, krTarget: t, krDone: Math.min(cur.krDone, t) } },
+  })
+  return null
+}
+
+export function setClassObjective(objective: string): string | null {
+  const o = objective.trim()
+  if (!o) return '班级目标不能为空'
+  if (o.length > 16) return '目标请控制在 16 字内'
+  const cur = classOkrOf(state)
+  set({ ...state, classOkr: { ...cur, objective: o } })
+  return null
+}
+
+export function tapClassKr(n = 1): string | null {
+  let s = ensureSession(state)
+  const nextCount = Math.max(0, classOkrOf(s).doneCount + n)
+  const cur = classOkrOf(s)
+  set({
+    ...s,
+    classOkr: { ...cur, doneCount: nextCount },
+    classSession: { ...s.classSession!, classKrMoved: s.classSession!.classKrMoved || n > 0 },
+  })
+  return null
+}
+
+/** 记分板：理由对应个人 / 班级 OKR，本课上限 +6 / −3 */
+export function adjustClassScore(studentId: string, delta: number, reason: string): string | null {
+  const u = state.users.find((x) => x.id === studentId)
+  if (!u || u.role !== 'student') return '只能给学生记课堂记录'
+  if (!CLASS_REASONS.includes(reason as ClassReason)) return '请选择与目标相关的理由'
+  if (reason === '走神提醒' && delta > 0) return '走神提醒只能减'
+  if (reason !== '走神提醒' && delta < 0) return '该理由请用加分'
+  let s = ensureSession(state)
+  const cap = applySessionCap(s, studentId, delta)
+  if (cap) return cap
+  const today = todayStr(s)
+  let personalOkrs = { ...s.personalOkrs }
+  let classOkr = classOkrOf(s)
+  let classKrMoved = s.classSession!.classKrMoved
+  let pets = s.pets
+  if (reason === '推进个人目标' && delta > 0) {
+    const cur = personalOkrOf(s, studentId)
+    const ticks = Math.min(delta, Math.max(0, cur.krTarget - cur.krDone))
+    if (ticks <= 0) return '个人关键结果已满'
+    const grew = cur.lastTickDate !== today
+    personalOkrs[studentId] = {
+      ...cur,
+      krDone: cur.krDone + ticks,
+      lastTickDate: today,
+    }
+    if (grew) {
+      pets = pets.map((p) =>
+        p.ownerId === studentId
+          ? { ...p, growth: p.growth + 8, mood: Math.min(100, p.mood + 4), expression: 'cheer' as Expression }
+          : p,
+      )
+    } else {
+      pets = pets.map((p) =>
+        p.ownerId === studentId
+          ? { ...p, mood: Math.min(100, p.mood + 4), expression: 'cheer' as Expression }
+          : p,
+      )
+    }
+  } else if (reason === '帮助班级目标' && delta > 0) {
+    classOkr = { ...classOkr, doneCount: classOkr.doneCount + 1 }
+    classKrMoved = true
+    pets = pets.map((p) =>
+      p.ownerId === studentId ? { ...p, mood: Math.min(100, p.mood + 4), expression: 'cheer' as Expression } : p,
+    )
+  } else if (reason === '走神提醒') {
+    pets = pets.map((p) =>
+      p.ownerId === studentId ? { ...p, mood: Math.max(0, p.mood - 6), expression: 'tired' as Expression } : p,
+    )
+  }
+  const deltas = { ...s.classSession!.deltas, [studentId]: (s.classSession!.deltas[studentId] ?? 0) + delta }
+  set({
+    ...s,
+    personalOkrs,
+    classOkr,
     pets,
+    classSession: { active: true, deltas, classKrMoved },
     ledger: [
-      ...state.ledger,
+      ...s.ledger,
       {
         id: uid('cs'),
         studentId,
         date: today,
         delta: 0,
         kind: delta >= 0 ? 'earn' : 'reverse',
-        reason: `课堂分 ${delta > 0 ? '+' : ''}${delta} · ${reason}`,
+        reason: `${reason} ${delta > 0 ? '+' : ''}${delta}`,
       },
     ],
   })
@@ -843,26 +1027,26 @@ export function adjustClassScore(studentId: string, delta: number, reason: strin
 }
 
 export function praiseWholeClass(reason = '全班表扬'): string | null {
-  const students = state.users.filter((u) => u.role === 'student' && u.classId === 'c1')
-  const today = todayStr(state)
-  const classScores = { ...state.classScores }
-  const pets = state.pets.map((p) => {
+  let s = ensureSession(state)
+  if (!s.classSession?.classKrMoved) return '本课班级目标尚未推进，暂不可全班表扬'
+  const students = s.users.filter((u) => u.role === 'student' && u.classId === 'c1')
+  const today = todayStr(s)
+  const pets = s.pets.map((p) => {
     if (!students.some((u) => u.id === p.ownerId)) return p
     return { ...p, mood: Math.min(100, p.mood + 4), expression: 'cheer' as Expression }
   })
-  const ledger = [...state.ledger]
+  const ledger = [...s.ledger]
   for (const u of students) {
-    classScores[u.id] = (classScores[u.id] ?? 0) + 1
     ledger.push({
       id: uid('cs'),
       studentId: u.id,
       date: today,
       delta: 0,
       kind: 'earn',
-      reason: `课堂分 +1 · ${reason}`,
+      reason,
     })
   }
-  set({ ...state, classScores, pets, ledger })
+  set({ ...s, pets, ledger })
   return null
 }
 

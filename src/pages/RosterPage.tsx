@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { addStudent, assignSeat, classLayoutOf, deleteStudent, occupantAt, renameStudent } from '../store'
+import { addStudent, assignSeat, classLayoutOf, deleteStudent, occupantAt, personalOkrOf, renameStudent, setStudentObjective } from '../store'
 import { seatLabel } from '../types'
 import { showToast } from '../toast'
 import type { AppState } from '../types'
@@ -20,6 +20,7 @@ export function RosterPage({ state }: { state: AppState }) {
   const [editName, setEditName] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [placingId, setPlacingId] = useState<string | null>(null)
+  const [editO, setEditO] = useState('')
 
   function setSeat(studentId: string, row: number, col: number) {
     const e = assignSeat(studentId, row, col)
@@ -93,12 +94,14 @@ export function RosterPage({ state }: { state: AppState }) {
               <th>座号</th>
               <th>姓名</th>
               <th>宠物</th>
+              <th>本周目标</th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody>
             {students.map((s) => {
               const pet = state.pets.find((p) => p.ownerId === s.id)
+              const okr = personalOkrOf(state, s.id)
               return (
                 <tr key={s.id} className={placingId === s.id ? 'placing-row' : ''}>
                   <td>{seatLabel(s.seat)}</td>
@@ -112,12 +115,19 @@ export function RosterPage({ state }: { state: AppState }) {
                   <td>{pet ? pet.nickname : '尚未领养'}</td>
                   <td>
                     {editId === s.id ? (
+                      <input value={editO} onChange={(e) => setEditO(e.target.value)} maxLength={16} />
+                    ) : (
+                      `${okr.objective || '未设'} ${okr.krDone}/${okr.krTarget}`
+                    )}
+                  </td>
+                  <td>
+                    {editId === s.id ? (
                       <div className="row">
                         <button
                           type="button"
                           className="primary"
                           onClick={() => {
-                            setMsg(renameStudent(s.id, editName) ?? '已改名')
+                            setMsg(renameStudent(s.id, editName) ?? setStudentObjective(s.id, editO) ?? '已保存')
                             setEditId(null)
                           }}
                         >
@@ -141,6 +151,7 @@ export function RosterPage({ state }: { state: AppState }) {
                           onClick={() => {
                             setEditId(s.id)
                             setEditName(s.name)
+                            setEditO(okr.objective)
                           }}
                         >
                           改名

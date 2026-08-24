@@ -192,9 +192,37 @@ export interface AppState {
   lastSettledWeek: string | null
   session: { userId: string; viewClassId?: string } | null
   todayOverride?: string
-  /** 课堂分：教师现场加减，不受每日 8 分上限 */
+  /** 兼容旧存档，不再作为大屏主角 */
   classScores: Record<string, number>
+  personalOkrs: Record<string, PersonalOkr>
+  classOkr: ClassOkr
+  classSession: ClassSession
 }
+
+export interface PersonalOkr {
+  weekId: string
+  objective: string
+  krTarget: number
+  krDone: number
+  lastTickDate: string | null
+}
+
+export interface ClassOkr {
+  weekId: string
+  objective: string
+  doneCount: number
+}
+
+export interface ClassSession {
+  active: boolean
+  deltas: Record<string, number>
+  classKrMoved: boolean
+}
+
+export const DEFAULT_KR_TARGET = 4
+export const SESSION_POS_CAP = 6
+export const SESSION_NEG_CAP = 3
+export const SEED_OBJECTIVES = ['本周订正全做完', '晚自习专注四次'] as const
 
 export const SPECIES: { id: SpeciesId; label: string }[] = [
   { id: 'fox', label: '狐' },

@@ -1,18 +1,41 @@
 import { useEffect, useState } from 'react'
 import { PetSvg } from '../components/PetSvg'
-import { adjustClassScore, CLASS_REASONS, classLayoutOf, occupantAt, praiseWholeClass } from '../store'
+import {
+  adjustClassScore,
+  CLASS_REASONS,
+  classLayoutOf,
+  classOkrOf,
+  classOkrProgress,
+  endClassSession,
+  occupantAt,
+  personalOkrOf,
+  praiseWholeClass,
+  sessionDeltaOf,
+  startClassSession,
+  tapClassKr,
+} from '../store'
 import type { AppState, User } from '../types'
 
 type Fx = { id: number; studentId: string; kind: 'up' | 'down' | 'all'; n: number }
 
-const HINT_KEY = 'class-pet-board-hint-v1'
+const HINT_KEY = 'class-pet-board-hint-v2'
+
+function KrDots({ done, target }: { done: number; target: number }) {
+  return (
+    <div className="kr-dots" aria-label={`个人进度 ${done}/${target}`}>
+      {Array.from({ length: target }, (_, i) => (
+        <span key={i} className={i < done ? 'on' : ''} />
+      ))}
+    </div>
+  )
+}
 
 export function ClassroomBoard({ state }: { state: AppState }) {
   const cid = 'c1'
   const layout = classLayoutOf(state)
   const roster = state.users.filter((u) => u.role === 'student' && u.classId === cid)
   const [picked, setPicked] = useState<User | null>(null)
-  const [reason, setReason] = useState<(typeof CLASS_REASONS)[number]>('发言')
+  const [reason, setReason] = useState<(typeof CLASS_REASONS)[number]>('推进个人目标')
   const [fx, setFx] = useState<Fx[]>([])
   const [shimmer, setShimmer] = useState(false)
   const [showHint, setShowHint] = useState(() => {
@@ -22,6 +45,10 @@ export function ClassroomBoard({ state }: { state: AppState }) {
       return true
     }
   })
+
+  const classOkr = classOkrOf(state)
+  const classPct = classOkrProgress(state)
+  const inSession = !!state.classSession?.active
 
   useEffect(() => {
     if (!fx.length) return
@@ -69,17 +96,47 @@ export function ClassroomBoard({ state }: { state: AppState }) {
         <div>
           <h1>课堂大屏</h1>
           <p>
-            初二（3）班 · {layout.cols} 列 × {layout.rows} 排
+            初二（3）班 · {layout.cols} 列 × {layout.rows} 排 · {inSession ? '上课中' : '未上课'}
           </p>
         </div>
-        <button className="board-praise" type="button" onClick={praise}>
-          全班表扬 +1
-        </button>
+        <div className="board-bar-ops">
+          {inSession ? (
+            <button type="button" onClick={() => endClassSession()}>
+              下课
+            </button>
+          ) : (
+            <button type="button" className="primary" onClick={() => startClassSession()}>
+              上课
+            </button>
+          )}
+          <button
+            className="board-praise"
+            type="button"
+            onClick={praise}
+            disabled={!state.classSession?.classKrMoved}
+            title={state.classSession?.classKrMoved ? '全班表扬' : '本课班级目标推进后才可表扬'}
+          >
+            全班表扬
+          </button>
+        </div>
+      </div>
+
+      <div className="class-okr-banner">
+        <div className="class-okr-title">
+          本周班级目标 · {classOkr.objective}
+        </div>
+        <div className="class-okr-bar" onClick={() => tapClassKr(1)}>
+          <div className="class-okr-fill" style={{ width: `${classPct}%` }} />
+          <span>
+            {classPct} / 100（{classOkr.doneCount}/{roster.length}）
+          </span>
+        </div>
+        <p className="muted">点进度条或记「帮助班级目标」推进；进度 = 勾选人数 ÷ 全班人数。</p>
       </div>
 
       {showHint && (
         <div className="board-hint">
-          <span>点座位即可加减分</span>
+          <span>点座位记录目标进展，对照自己打钩，不比课堂总分</span>
           <button type="button" onClick={dismissHint}>
             知道了
           </button>
@@ -100,7 +157,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
             return <div key={`${row}-${col}`} className="board-card desk empty-desk" aria-hidden />
           }
           const pet = state.pets.find((p) => p.ownerId === s.id)
-          const live = state.classScores?.[s.id] ?? 0
+          const okr = personalOkrOf(state, s.id)
           const cardFx = fx.filter((f) => f.studentId === s.id)
           const last = cardFx[cardFx.length - 1]
           return (
@@ -136,9 +193,9 @@ export function ClassroomBoard({ state }: { state: AppState }) {
                   <div className="muted">尚未领养</div>
                 )}
               </div>
-              <div className="board-live">
-                课堂分 <strong>{live}</strong>
-              </div>
+              {pet && <div className="board-petname">{pet.name || pet.nickname}</div>}
+              <div className="board-okr">{okr.objective || '未设目标'}</div>
+              <KrDots done={okr.krDone} target={okr.krTarget} />
             </button>
           )
         })}
@@ -147,8 +204,16 @@ export function ClassroomBoard({ state }: { state: AppState }) {
       {picked && (
         <div className="pad-mask" onClick={() => setPicked(null)}>
           <div className="score-pad" onClick={(e) => e.stopPropagation()}>
-            <h2>给 {picked.name} 记分</h2>
-            <p className="muted">当前课堂分 {state.classScores?.[picked.id] ?? 0}</p>
+            <h2>{picked.name}</h2>
+            <p className="muted">
+              {personalOkrOf(state, picked.id).objective || '未设个人目标'} · 本课记录{' '}
+              {sessionDeltaOf(picked.id) > 0 ? '+' : ''}
+              {sessionDeltaOf(picked.id)}（上限 +6 / −3）
+            </p>
+            <KrDots
+              done={personalOkrOf(state, picked.id).krDone}
+              target={personalOkrOf(state, picked.id).krTarget}
+            />
             <div className="row">
               {CLASS_REASONS.map((r) => (
                 <button key={r} type="button" className={reason === r ? 'on' : ''} onClick={() => setReason(r)}>
@@ -157,15 +222,20 @@ export function ClassroomBoard({ state }: { state: AppState }) {
               ))}
             </div>
             <div className="row pad-ops">
-              <button type="button" className="primary" onClick={() => apply(picked.id, 1)}>
-                +1
-              </button>
-              <button type="button" className="primary" onClick={() => apply(picked.id, 2)}>
-                +2
-              </button>
-              <button type="button" className="pad-minus" onClick={() => apply(picked.id, -1)}>
-                −1
-              </button>
+              {reason === '走神提醒' ? (
+                <button type="button" className="pad-minus" onClick={() => apply(picked.id, -1)}>
+                  −1
+                </button>
+              ) : (
+                <>
+                  <button type="button" className="primary" onClick={() => apply(picked.id, 1)}>
+                    +1
+                  </button>
+                  <button type="button" className="primary" onClick={() => apply(picked.id, 2)}>
+                    +2
+                  </button>
+                </>
+              )}
             </div>
             <button type="button" onClick={() => setPicked(null)}>
               关闭

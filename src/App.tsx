@@ -9,12 +9,13 @@ import { ShopPage } from './pages/ShopPage'
 import { SquadPage } from './pages/SquadPage'
 import { TeacherPage } from './pages/TeacherPage'
 import { RosterPage } from './pages/RosterPage'
+import { GoalsPage } from './pages/GoalsPage'
 import { VisitPage } from './pages/VisitPage'
 import { getState, logout, resetDemo, subscribe } from './store'
 import { subscribeToast } from './toast'
 import type { AppState } from './types'
 
-type Tab = 'home' | 'adopt' | 'report' | 'visit' | 'squad' | 'shop' | 'teacher' | 'parent' | 'board' | 'roster'
+type Tab = 'home' | 'adopt' | 'report' | 'visit' | 'squad' | 'shop' | 'teacher' | 'parent' | 'board' | 'roster' | 'goals'
 
 const ROLE_ZH: Record<string, string> = {
   student: '学生',
@@ -30,7 +31,7 @@ function defaultTabForRole(role: string): Tab {
 }
 
 function tabsAllowed(role: string): Tab[] {
-  if (role === 'teacher') return ['board', 'teacher', 'squad', 'roster']
+  if (role === 'teacher') return ['board', 'teacher', 'squad', 'roster', 'goals']
   if (role === 'parent') return ['parent']
   return ['home', 'adopt', 'report', 'visit', 'squad', 'shop']
 }
@@ -114,6 +115,7 @@ export default function App() {
     { id: 'board', label: '课堂大屏', show: session.role === 'teacher' },
     { id: 'teacher', label: '老师抽查', show: session.role === 'teacher' },
     { id: 'roster', label: '花名册', show: session.role === 'teacher' },
+    { id: 'goals', label: '目标', show: session.role === 'teacher' },
     { id: 'parent', label: '家长只读', show: session.role === 'parent' },
   ]
 
@@ -184,6 +186,7 @@ export default function App() {
         {tab === 'board' && session.role === 'teacher' && <ClassroomBoard state={state} />}
         {tab === 'teacher' && session.role === 'teacher' && <TeacherPage state={state} classId="c1" />}
         {tab === 'roster' && session.role === 'teacher' && <RosterPage state={state} />}
+        {tab === 'goals' && session.role === 'teacher' && <GoalsPage state={state} />}
         {tab === 'parent' && session.role === 'parent' && <ParentPage state={state} parent={session} />}
       </main>
       {toast && <div className="app-toast" role="status">{toast}</div>}
