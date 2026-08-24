@@ -10,7 +10,7 @@ import {
   undoTeacherAudit,
 } from '../store'
 import type { AppState, Report } from '../types'
-import { CATEGORY_LABEL, STATUS_LABEL, displayLedgerReason } from '../types'
+import { CATEGORY_LABEL, STATUS_LABEL } from '../types'
 import { auditQueue, moodCareList } from '../rules'
 import { showToast } from '../toast'
 import { classIdOf } from '../engine'
@@ -189,23 +189,6 @@ export function TeacherPage({ state, meId }: { state: AppState; meId: string }) 
             {streak >= 2 ? `（连续 ${streak} 天雨，建议今天课后单独聊聊）` : '（今日报雨）'}
           </div>
         ))}
-      </div>
-
-      <div className="card">
-        <h3>本班流水</h3>
-        <ul>
-          {state.ledger
-            .slice()
-            .reverse()
-            .slice(0, 80)
-            .map((l) => (
-              <li key={l.id}>
-                {l.date} {nameOf(l.studentId)} {l.delta > 0 ? '+' : ''}
-                {l.delta} {displayLedgerReason(l.reason)}
-                {l.by && l.by !== l.studentId ? `（${nameOf(l.by)}）` : ''}
-              </li>
-            ))}
-        </ul>
       </div>
 
       <div className="card">

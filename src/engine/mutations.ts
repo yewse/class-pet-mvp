@@ -106,8 +106,6 @@ function nowIso(s: AppState): string {
   return new Date(nowMs(s)).toISOString()
 }
 
-const FALLBACK_O = ['本周订正全做完', '晚自习专注四次']
-
 /* ---------- 归档与周期 ---------- */
 
 export function archiveAndSyncOkrs(s: AppState): AppState {
@@ -115,11 +113,10 @@ export function archiveAndSyncOkrs(s: AppState): AppState {
   const personalOkrs: Record<string, PersonalOkr> = { ...(s.personalOkrs ?? {}) }
   const okrHistory: OkrRecord[] = [...(s.okrHistory ?? [])]
   const defTarget = rulesOf(s).defaultKrTarget
-  let i = 0
   for (const u of s.users.filter((x) => x.role === 'student')) {
     const cur = personalOkrs[u.id]
     if (!cur) {
-      personalOkrs[u.id] = emptyPersonalOkr(week, FALLBACK_O[i % FALLBACK_O.length], defTarget)
+      personalOkrs[u.id] = emptyPersonalOkr(week, '', defTarget)
     } else if (cur.weekId !== week) {
       if (!okrHistory.some((r) => r.studentId === u.id && r.weekId === cur.weekId)) {
         okrHistory.push({
@@ -134,7 +131,6 @@ export function archiveAndSyncOkrs(s: AppState): AppState {
       }
       personalOkrs[u.id] = { ...emptyPersonalOkr(week, '', defTarget), objective: cur.objective }
     }
-    i += 1
   }
   const classOkrHistory: ClassOkrRecord[] = [...(s.classOkrHistory ?? [])]
   const rawClass = s.classOkr
@@ -208,10 +204,8 @@ function applyHonorForWeek(s: AppState, week: string): AppState {
     const honor = squadTier(sw.points, cfg) ?? undefined
     return { ...sw, honor }
   })
-  const ranked = [...squadWeeks]
-    .filter((sw) => sw.weekId === week && sw.honor)
-    .sort((a, b) => b.points - a.points)
-  for (const sw of ranked) {
+  const qualified = [...squadWeeks].filter((sw) => sw.weekId === week && sw.honor)
+  for (const sw of qualified) {
     const team = s.squads.find((x) => x.id === sw.teamId)
     if (!team || !sw.honor) continue
     for (const sid of team.memberIds) {
@@ -368,7 +362,7 @@ export function addStudent(
       ...s.users,
       { id: args.id, name: n, role: 'student', code: 'student', studentNo: no, classId: classIdOf(s), dnd: false, seat },
     ],
-    personalOkrs: { ...s.personalOkrs, [args.id]: emptyPersonalOkr(weekIdOf(s), FALLBACK_O[0]) },
+    personalOkrs: { ...s.personalOkrs, [args.id]: emptyPersonalOkr(weekIdOf(s), '') },
   })
 }
 
@@ -401,34 +395,15 @@ export function setStudentNo(s: AppState, actor: Actor, studentId: string, stude
   return ok({ ...s, users: s.users.map((x) => (x.id === studentId ? { ...x, studentNo: no || undefined } : x)) })
 }
 
-/** 离班清退：删除该生全部养成数据（数据删除权的引擎原语）。 */
+/** 离班清退：停用学生账户，保留宠物与账本存档。 */
 export function deleteStudent(s: AppState, actor: Actor, studentId: string): EngineResult {
   const denied = requireHomeroom(s, actor)
   if (denied) return err(s, denied)
   const u = s.users.find((x) => x.id === studentId)
   if (!u || u.role !== 'student') return err(s, '只能清退学生')
-  const reportIds = new Set(s.reports.filter((r) => r.authorId === studentId).map((r) => r.id))
-  const unlocked = { ...s.unlocked }
-  const unlockedAchievements = { ...s.unlockedAchievements }
-  delete unlocked[studentId]
-  delete unlockedAchievements[studentId]
   return ok({
     ...s,
-    users: s.users.filter((x) => x.id !== studentId),
-    pets: s.pets.filter((p) => p.ownerId !== studentId),
-    ledger: s.ledger.filter((l) => l.studentId !== studentId),
-    reports: s.reports.filter((r) => r.authorId !== studentId),
-    reviews: s.reviews.filter((r) => r.reviewerId !== studentId && !reportIds.has(r.reportId)),
-    visits: s.visits.filter((v) => v.fromId !== studentId && v.toId !== studentId),
-    honors: s.honors.filter((h) => h.studentId !== studentId),
-    krTicks: (s.krTicks ?? []).filter((k) => k.studentId !== studentId),
-    dailyMoods: (s.dailyMoods ?? []).filter((m) => m.studentId !== studentId),
-    baseHabits: (s.baseHabits ?? []).filter((h) => h.studentId !== studentId),
-    okrHistory: (s.okrHistory ?? []).filter((r) => r.studentId !== studentId),
-    unlocked,
-    unlockedAchievements,
-    squads: s.squads.map((x) => ({ ...x, memberIds: x.memberIds.filter((id) => id !== studentId) })),
-    personalOkrs: Object.fromEntries(Object.entries(s.personalOkrs ?? {}).filter(([k]) => k !== studentId)),
+    users: s.users.map((x) => (x.id === studentId ? { ...x, active: 0 } : x)),
   })
 }
 
@@ -465,23 +440,6 @@ export function adopt(
   const headwearId = args.headwearId ?? 'hw_leaf'
   const clothesId = args.clothesId ?? 'cl_scarf'
   const shoesId = args.shoesId ?? 'sh_none'
-  const cost = adoptCost([headwearId, clothesId, shoesId])
-  const bal = balance(s, ownerId)
-  if (cost > bal) return err(s, '养成积分不足')
-  const today = todayStr(s)
-  const ledger = [...s.ledger]
-  if (cost > 0) {
-    ledger.push({
-      id: uid('led'),
-      studentId: ownerId,
-      date: today,
-      delta: -cost,
-      kind: 'spend',
-      reason: '领养装扮',
-      by: ownerId,
-      at: nowIso(s),
-    })
-  }
   const have = new Set(s.unlocked[ownerId] || ['skin_basic_leaf'])
   have.add('skin_basic_leaf')
   have.add(clothesId)
@@ -513,7 +471,6 @@ export function adopt(
   }
   return ok({
     ...s,
-    ledger,
     pets: [...s.pets, pet],
     unlocked: { ...s.unlocked, [ownerId]: [...have] },
   })
@@ -692,8 +649,8 @@ export function social(
     if (s.visits.some((v) => v.date === today && v.type === 'cotrain' && (v.fromId === toId || v.toId === toId))) {
       return err(s, '对方今日已共训')
     }
-    if (!canSpend(s, fromId, today, 2) || !canSpend(s, toId, today, 2)) {
-      return err(s, '双方积分或今日消耗额度不足（各 −2）')
+    if (!canSpend(s, fromId, today, 2)) {
+      return err(s, '积分或今日消耗额度不足')
     }
   }
   if (type === 'snack') {
@@ -705,7 +662,6 @@ export function social(
   }
   if (type === 'cotrain') {
     ledger.push({ id: uid('led'), studentId: fromId, date: today, delta: -2, kind: 'spend', reason: '共训', by: fromId, at: nowIso(s) })
-    ledger.push({ id: uid('led'), studentId: toId, date: today, delta: -2, kind: 'spend', reason: '共训', by: fromId, at: nowIso(s) })
   }
   const pets = s.pets.map((p) => {
     if (p.ownerId === toId && (type === 'snack' || type === 'emoji' || type === 'visit')) {
@@ -811,6 +767,7 @@ export function buyItem(s: AppState, actor: Actor, itemId: string): EngineResult
   const today = todayStr(s)
   const bal = balance(s, studentId)
   if (bal < item.cost) return err(s, `积分不足，还差 ${item.cost - bal} 分`)
+  if (!canSpend(s, studentId, today, item.cost)) return err(s, '今日消耗已满或积分不足')
   return ok({
     ...s,
     ledger: [
@@ -1175,8 +1132,8 @@ export function toggleClassHour(s: AppState, actor: Actor): EngineResult {
 /* ---------- 目标设置 ---------- */
 
 export function setStudentObjective(s: AppState, actor: Actor, studentId: string, objective: string): EngineResult {
-  if (actor.role === 'student' && actor.id !== studentId) return err(s, '只能改自己的目标')
-  if (actor.role === 'subject') return err(s, '个人目标由学生本人或班主任修改')
+  if (actor.role !== 'student') return err(s, '个人目标只能由学生本人设置')
+  if (actor.id !== studentId) return err(s, '只能改自己的目标')
   const u = s.users.find((x) => x.id === studentId)
   if (!u || u.role !== 'student') return err(s, '只能改学生目标')
   const o = objective.trim()

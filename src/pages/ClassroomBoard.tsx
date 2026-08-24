@@ -14,7 +14,6 @@ import {
   markMissed,
   occupantAt,
   pendingTicksOf,
-  personalOkrOf,
   praiseWholeClass,
   stalePendingTicks,
   startClassSession,
@@ -27,19 +26,8 @@ import { DEFAULT_CLASS_PERK, rulesOf } from '../types'
 import type { AppState, Role, User } from '../types'
 import { isHomeroomRole, isStaffRole } from '../types'
 
-type Fx = { id: number; studentId: string; n: number }
-
 const HINT_KEY = 'class-pet-board-hint-v3'
 
-function KrDots({ done, target, pending }: { done: number; target: number; pending?: number }) {
-  return (
-    <div className="kr-dots" aria-label={`个人进度 ${done}/${target}`}>
-      {Array.from({ length: target }, (_, i) => (
-        <span key={i} className={i < done ? 'on' : i < done + (pending ?? 0) ? 'pending' : ''} />
-      ))}
-    </div>
-  )
-}
 
 const BASE_STATUS_LABEL: Record<string, string> = {
   done: '今日已达标',
@@ -51,7 +39,6 @@ export function ClassroomBoard({ state, meRole }: { state: AppState; meRole: Rol
   const layout = classLayoutOf(state)
   const roster = state.users.filter((u) => u.role === 'student')
   const [picked, setPicked] = useState<User | null>(null)
-  const [fx, setFx] = useState<Fx[]>([])
   const [shimmer, setShimmer] = useState(false)
   const [breakNote, setBreakNote] = useState('')
   const [perkDraft, setPerkDraft] = useState(DEFAULT_CLASS_PERK)
@@ -81,12 +68,6 @@ export function ClassroomBoard({ state, meRole }: { state: AppState; meRole: Rol
   const aggConfirms = (state.krTicks ?? []).filter((k) => k.weekId === week && k.status === 'confirmed').length
 
   useEffect(() => {
-    if (!fx.length) return
-    const t = window.setTimeout(() => setFx((xs) => xs.slice(1)), 900)
-    return () => window.clearTimeout(t)
-  }, [fx])
-
-  useEffect(() => {
     if (!picked) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setPicked(null)
@@ -95,12 +76,7 @@ export function ClassroomBoard({ state, meRole }: { state: AppState; meRole: Rol
     return () => window.removeEventListener('keydown', onKey)
   }, [picked])
 
-  function burst(studentId: string, n: number) {
-    setFx((xs) => [...xs, { id: Date.now() + Math.random(), studentId, n }])
-  }
-
   async function markAllBase() {
-    const before = new Map(roster.map((s) => [s.id, todayBaseOf(state, s.id)?.status]))
     const err = await markClassBaseDone()
     if (err && !err.startsWith('已记')) {
       showToast(err, 'err')
@@ -109,10 +85,6 @@ export function ClassroomBoard({ state, meRole }: { state: AppState; meRole: Rol
     showToast(err ?? '已记全班基础达标', 'ok')
     setShimmer(true)
     window.setTimeout(() => setShimmer(false), 900)
-    for (const s of roster) {
-      const st = before.get(s.id)
-      if (st !== 'missed' && st !== 'exempt' && st !== 'done') burst(s.id, 1)
-    }
   }
 
   /** 例外只进教师账本：公屏不打负标、不飘红字。 */
@@ -148,7 +120,6 @@ export function ClassroomBoard({ state, meRole }: { state: AppState; meRole: Rol
       showToast(err, 'err')
       return
     }
-    burst(studentId, 1)
     setBreakNote('')
     setPicked(null)
   }
@@ -161,7 +132,6 @@ export function ClassroomBoard({ state, meRole }: { state: AppState; meRole: Rol
     }
     setShimmer(true)
     window.setTimeout(() => setShimmer(false), 1200)
-    for (const s of roster) burst(s.id, 1)
   }
 
   function dismissHint() {
@@ -282,21 +252,15 @@ export function ClassroomBoard({ state, meRole }: { state: AppState; meRole: Rol
             return <div key={`${row}-${col}`} className="board-card desk empty-desk" aria-hidden />
           }
           const pet = state.pets.find((p) => p.ownerId === s.id)
-          const okr = personalOkrOf(state, s.id)
-          const wait = pendingTicksOf(state, s.id).length
-          const cardFx = fx.filter((f) => f.studentId === s.id)
-          const last = cardFx[cardFx.length - 1]
           return (
             <button
               type="button"
               key={s.id}
-              className={`board-card desk ${last ? 'fx-up' : ''}`}
+              className="board-card desk"
               onClick={() => staff && setPicked(s)}
             >
               <div className="board-name">{s.name}</div>
               <div className="board-pet-slot">
-                {last && <span className="float-n pos">+{last.n}</span>}
-                {last && <span className="gold-burst" aria-hidden />}
                 {pet ? (
                   <PetSvg
                     species={pet.species}
@@ -311,10 +275,6 @@ export function ClassroomBoard({ state, meRole }: { state: AppState; meRole: Rol
                 )}
               </div>
               {pet && <div className="board-petname">{pet.name || pet.nickname}</div>}
-              <div className="board-okr">{okr.objective || '未设目标'}</div>
-              <KrDots done={okr.krDone} target={okr.krTarget} pending={wait} />
-              {wait > 0 && <div className="pending-tag">待确认</div>}
-              {todayBaseOf(state, s.id)?.status === 'done' && <div className="ok">今日基础</div>}
             </button>
           )
         })}

@@ -33,7 +33,7 @@ describe('权限：服务端注入的 actor 决定一切', () => {
   it('任课教师不能发集体奖励、不能改学生个人目标', () => {
     const s = baseState()
     expect(engine.grantClassPerk(s, SUBJECT, '优惠').error).toBe('仅班主任可操作')
-    expect(engine.setStudentObjective(s, SUBJECT, 's1', '订正全做完').error).toBe('个人目标由学生本人或班主任修改')
+    expect(engine.setStudentObjective(s, SUBJECT, 's1', '订正全做完').error).toBe('个人目标只能由学生本人设置')
   })
 
   it('学生只能改自己的目标，不能替别人打钩确认', () => {
@@ -155,7 +155,7 @@ describe('花名册与账号一致性前提', () => {
     expect(withNo.error).toBeNull()
   })
 
-  it('清退学生会删除其全部养成数据（删除权原语）', () => {
+  it('清退学生会停用账户，保留宠物与账本存档', () => {
     let s = baseState()
     s = engine.adopt(s, LIN, {
       species: 'fox',
@@ -166,9 +166,9 @@ describe('花名册与账号一致性前提', () => {
     s = engine.submitKrTick(s, LIN, '订正本第3页做完').state
     const r = engine.deleteStudent(s, HOMEROOM, 's1')
     expect(r.error).toBeNull()
-    expect(r.state.users.some((u) => u.id === 's1')).toBe(false)
-    expect(r.state.pets.some((p) => p.ownerId === 's1')).toBe(false)
-    expect(r.state.krTicks.some((k) => k.studentId === 's1')).toBe(false)
-    expect(r.state.personalOkrs['s1']).toBeUndefined()
+    const user = r.state.users.find((u) => u.id === 's1')
+    expect(user).toBeDefined()
+    expect(user?.active).toBe(0)
+    expect(r.state.pets.some((p) => p.ownerId === 's1')).toBe(true)
   })
 })

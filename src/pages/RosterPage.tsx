@@ -44,6 +44,7 @@ export function RosterPage({ state }: { state: AppState }) {
   const [editO, setEditO] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [placingId, setPlacingId] = useState<string | null>(null)
+  const [consentChecked, setConsentChecked] = useState<Set<string>>(new Set())
 
   function setSeat(studentId: string, row: number, col: number) {
     void assignSeat(studentId, row, col).then((e) => {
@@ -223,6 +224,28 @@ export function RosterPage({ state }: { state: AppState }) {
           </div>
         </div>
 
+        {students.filter((s) => !meta[s.id]?.consentAt).length > 0 && (
+          <div className="row" style={{ marginTop: 20, marginBottom: 10 }}>
+            <button
+              type="button"
+              className="primary"
+              disabled={consentChecked.size === 0}
+              onClick={() => {
+                void Promise.all(
+                  [...consentChecked].map((id) => recordConsent(id, 'paper')),
+                ).then(() => {
+                  showToast(`已批量登记 ${consentChecked.size} 人的监护人同意`, 'ok')
+                  setConsentChecked(new Set())
+                })
+              }}
+            >
+              批量登记选中的同意书
+            </button>
+            <button type="button" onClick={() => window.print()}>
+              打印PIN清单
+            </button>
+          </div>
+        )}
         <table className="school-table roster-table">
           <thead>
             <tr>
@@ -270,16 +293,19 @@ export function RosterPage({ state }: { state: AppState }) {
                     {m?.consentAt ? (
                       <span className="ok">已登记</span>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void recordConsent(s.id, 'paper').then(({ error }) =>
-                            showToast(error ?? `已登记 ${s.name} 的监护人同意（纸质）`, error ? 'err' : 'ok'),
-                          )
-                        }
-                      >
-                        登记（收到纸质）
-                      </button>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={consentChecked.has(s.id)}
+                          onChange={(e) => {
+                            const next = new Set(consentChecked)
+                            if (e.target.checked) next.add(s.id)
+                            else next.delete(s.id)
+                            setConsentChecked(next)
+                          }}
+                        />
+                        待登记
+                      </label>
                     )}
                   </td>
                   <td>
@@ -348,14 +374,14 @@ export function RosterPage({ state }: { state: AppState }) {
                         <button
                           type="button"
                           onClick={() => {
-                            if (!window.confirm(`确认删除 ${s.name}？将删除其账号、宠物、积分、申报与周期历史（不可恢复）。`)) return
+                            if (!window.confirm(`确认停用 ${s.name}？将停用该学生账户（宠物与账本存档保留）。`)) return
                             void deleteStudent(s.id).then(({ error }) => {
-                              setMsg(error ?? `已删除 ${s.name}`)
-                              showToast(error ?? `已删除 ${s.name}`, error ? 'err' : 'ok')
+                              setMsg(error ?? `已停用 ${s.name}`)
+                              showToast(error ?? `已停用 ${s.name}`, error ? 'err' : 'ok')
                             })
                           }}
                         >
-                          删除
+                          停用
                         </button>
                       </div>
                     )}
@@ -367,7 +393,7 @@ export function RosterPage({ state }: { state: AppState }) {
         </table>
         {placing && <p className="muted">正在给 {placing.name} 调座。</p>}
         <p className="muted">
-          学生登录方式：班级 + 姓名（同名加学号）+ PIN。忘记 PIN 用「重置 PIN」；转学/毕业用「删除」行使数据删除。
+          学生登录方式：班级 + 姓名（同名加学号）+ PIN。忘记 PIN 用「重置 PIN」；转学/毕业用「停用」。
         </p>
       </div>
     </div>

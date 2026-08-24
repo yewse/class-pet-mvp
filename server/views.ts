@@ -94,7 +94,11 @@ export function viewFor(
   classes: ClassRow[],
   activeClassId: string,
 ): AppState {
-  return me.role === 'student'
-    ? studentView(state, me, schoolName, classes, activeClassId)
-    : teacherView(state, me, schoolName, classes, activeClassId)
+  if (me.role === 'student') {
+    return studentView(state, me, schoolName, classes, activeClassId)
+  }
+  if (me.role === 'admin') {
+    return base(state, schoolName, classes, activeClassId)
+  }
+  return teacherView(state, me, schoolName, classes, activeClassId)
 }

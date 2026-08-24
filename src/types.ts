@@ -93,6 +93,7 @@ export interface User {
   classIds?: string[]
   dnd: boolean
   seat?: Seat
+  active?: number
 }
 
 export interface Pet {
