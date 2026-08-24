@@ -178,7 +178,7 @@ export function AdoptPage({
           <input
             value={nick}
             onChange={(e) => setNick(e.target.value)}
-            placeholder="2–8 个汉字或字母"
+            placeholder="2–8 个汉字、字母或数字"
             maxLength={8}
             required
           />
@@ -242,18 +242,19 @@ export function AdoptPage({
             className="primary"
             disabled={!!validatePetName(nick) || !!validateMotto(motto)}
             onClick={() => {
-              const err = adopt(studentId, base.species, nick, face, {
+              void adopt(studentId, base.species, nick, face, {
                 basePetId: base.id,
                 headwearId: hw,
                 clothesId: cl,
                 shoesId: sh,
                 motto,
+              }).then((err) => {
+                if (err) {
+                  setMsg(err)
+                  return
+                }
+                setShowCere(true)
               })
-              if (err) {
-                setMsg(err)
-                return
-              }
-              setShowCere(true)
             }}
           >
             确认领养

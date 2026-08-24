@@ -653,3 +653,34 @@ select {
   font-weight: 700;
 }
 button.care-later:disabled { opacity: 1; }
+
+/* v14 新增 */
+.board-aggregates {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  color: #ffe7b0;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+.board-aggregates strong { font-size: 24px; color: #ffd56a; }
+.pad-status { margin: 0 0 4px; color: #5a4a38; font-weight: 700; }
+.pad-stack { display: flex; flex-direction: column; gap: 8px; }
+.pad-medium { font-size: 22px; min-height: 56px; font-weight: 800; }
+.retro-card {
+  background: #fff4cc;
+  border: 2px solid #c98a18;
+  border-radius: 14px;
+  padding: 10px 14px;
+  margin: 10px 0;
+}
+.retro-card input { background: #fff; }
+.retest-box {
+  background: #eef6ee;
+  border: 2px solid #2a7a3a;
+  border-radius: 14px;
+  padding: 10px 14px;
+  margin: 8px 0 12px;
+}
+.retest-box .item { border-top-color: #bcd8bc; }

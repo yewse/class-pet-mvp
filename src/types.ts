@@ -1,6 +1,7 @@
-export type Role = 'homeroom' | 'subject' | 'student'
+export type Role = 'admin' | 'homeroom' | 'subject' | 'student'
 
 export const ROLE_ZH: Record<Role, string> = {
+  admin: '管理员',
   homeroom: '班主任',
   subject: '任课教师',
   student: '学生',
@@ -61,6 +62,10 @@ export interface ClassLayout {
 }
 
 export const DEFAULT_LAYOUT: ClassLayout = { cols: 6, rows: 5 }
+export const LAYOUT_MIN_ROWS = 2
+export const LAYOUT_MAX_ROWS = 8
+export const LAYOUT_MIN_COLS = 2
+export const LAYOUT_MAX_COLS = 12
 
 export function seatLabel(seat: Seat | undefined | null): string {
   if (!seat) return '—'
@@ -81,12 +86,13 @@ export interface User {
   name: string
   role: Role
   code: string
+  /** 学号（选填）：允许同名学生并存，登录用「姓名#学号」区分 */
+  studentNo?: string
   studentId?: string
   classId?: string
   classIds?: string[]
   dnd: boolean
   seat?: Seat
-  seatNumber?: number
 }
 
 export interface Pet {
@@ -130,6 +136,8 @@ export interface Report {
   submittedAt: string
   credited: boolean
   rejectNote?: string
+  /** 错题重测：指向 3 天前那条已入账的订正申报 */
+  retestOf?: string
 }
 
 export interface PeerReview {
@@ -148,6 +156,10 @@ export interface LedgerEntry {
   kind: 'earn' | 'spend' | 'reverse'
   reason: string
   ref?: string
+  /** 操作者（审计用）：教师 id / 学生本人 / system */
+  by?: string
+  /** 精确时间 ISO（审计用） */
+  at?: string
 }
 
 export interface VisitEvent {
@@ -172,6 +184,7 @@ export interface HonorItem {
   weekId: string
   studentId: string
   label: string
+  by?: string
 }
 
 export interface AchievementDef {
@@ -208,19 +221,32 @@ export interface AppState {
   inClassHour: Record<string, boolean>
   activeWeek: string
   lastSettledWeek: string | null
-  session: { userId: string; viewClassId?: string } | null
+  session: { userId: string } | null
   todayOverride?: string
   /** 演示/测试时钟，毫秒 */
   now?: number
-  /** 兼容旧存档，不再作为大屏主角；按周清零 */
-  classScores: Record<string, number>
-  classScoreWeek?: string
   personalOkrs: Record<string, PersonalOkr>
   classOkr: ClassOkr
   classSession: ClassSession
   krTicks: KrTick[]
   dailyMoods: DailyMood[]
   baseHabits: BaseHabit[]
+  /** 已归档的个人周期（周目标 + 打钩 + 自评复盘） */
+  okrHistory: OkrRecord[]
+  /** 已归档的班级周期 */
+  classOkrHistory: ClassOkrRecord[]
+  /** 服务端按角色注入的派生数据（客户端只读；学生视图收不到他人明细时用） */
+  derived?: {
+    classPct?: number
+    weekActiveStudents?: number
+    rosterCount?: number
+  }
+  /** 学生视图专用：匿名互评池（服务端已剥离申报者身份） */
+  reviewPool?: { id: string; category: ReportCategory; evidence: string }[]
+  /** 班主任视图专用：账号侧的名册元数据（PIN 状态、监护人同意记录） */
+  rosterMeta?: Record<string, { hasPin: boolean; consentAt: string | null; consentMethod: string | null }>
+  /** 服务端注入的当前激励规则（管理员可改） */
+  rules?: RuleConfig
 }
 
 export type MoodId = 'sun' | 'overcast' | 'rain'
@@ -253,36 +279,72 @@ export interface PersonalOkr {
   krTarget: number
   krDone: number
   lastTickDate: string | null
+  /** 周五起的自评：0 / 0.3 / 0.7 / 1；null 表示未复盘 */
+  selfScore?: number | null
+  /** 一句复盘（≤40 字） */
+  retro?: string
+}
+
+export interface OkrRecord {
+  studentId: string
+  weekId: string
+  objective: string
+  krTarget: number
+  krDone: number
+  selfScore: number | null
+  retro: string | null
 }
 
 export interface ClassOkr {
   weekId: string
   objective: string
-  doneCount: number
   perkText?: string
   perkGranted?: boolean
+  /** 班级一句复盘（班主任填写） */
+  retro?: string
 }
+
+export interface ClassOkrRecord {
+  weekId: string
+  objective: string
+  progressPct: number
+  perkGranted: boolean
+  perkText?: string
+  retro: string | null
+}
+
+export type BaseHabitStatus = 'done' | 'missed' | 'exempt'
 
 export interface BaseHabit {
   studentId: string
   weekId: string
   date: string
-  status: 'done' | 'excluded'
+  /** done=达标；missed=未完成（仅教师可见，计入分母）；exempt=豁免（病假等，不计分母） */
+  status: BaseHabitStatus
+  by?: string
 }
 
-export const DEFAULT_CLASS_PERK = '周五少一项作业'
+export const DEFAULT_CLASS_PERK = '周五自习课自由选座'
 export const REFLECT_CHIP = 'hw_reflect'
 
 export interface ClassSession {
   active: boolean
-  deltas: Record<string, number>
   classKrMoved: boolean
 }
 
 export const DEFAULT_KR_TARGET = 4
-export const SESSION_POS_CAP = 6
-export const SESSION_NEG_CAP = 3
+export const KR_TARGET_MIN = 1
+export const KR_TARGET_MAX = 12
 export const SEED_OBJECTIVES = ['本周订正全做完', '晚自习专注四次'] as const
+export const SELF_SCORE_OPTIONS = [0, 0.3, 0.7, 1] as const
+export const RETRO_MAX_LEN = 40
+export const EVIDENCE_MIN_LEN = 6
+export const RETEST_DELAY_DAYS = 3
+
+/** 成长节奏：照料 / 当日首次确认打钩 / 完成周复盘 */
+export const GROWTH_CARE = 4
+export const GROWTH_TICK = 6
+export const GROWTH_RETRO = 20
 
 export const SPECIES: { id: SpeciesId; label: string }[] = [
   { id: 'fox', label: '狐' },
@@ -393,3 +455,73 @@ export const AUDIT_MAX = 8
 export const HONOR_WALL_MAX = 6
 export const HONOR_STREAK_MAX = 2
 export const MOUNT_ID = 'mount_deskpad_01'
+
+/**
+ * 激励规则：由管理员维护，存于服务端，随视图下发。
+ * 「产品宪法」不在此列（无排行榜、心情不影响宠物、公屏无负面、积分不可转让）——那些是结构，不是参数。
+ */
+export interface RuleConfig {
+  /** 各类申报的积分值 */
+  categoryPoints: Record<ReportCategory, number>
+  /** 每日入账上限（反肝） */
+  dailyEarnCap: number
+  /** 每日社交消耗上限 */
+  dailySpendCap: number
+  /** 每日申报条数上限 */
+  dailyReportCap: number
+  /** 每日互评条数上限 */
+  dailyReviewCap: number
+  /** 抽查队列下限 / 上限 */
+  auditMin: number
+  auditMax: number
+  /** 荣誉橱窗每周席位 / 连续上墙上限 */
+  honorWallMax: number
+  honorStreakMax: number
+  /** 小队档位阈值与加分 */
+  squadBronze: number
+  squadSilver: number
+  squadGold: number
+  squadComboBonus: number
+  squadWeeklyCap: number
+  /** 宠物成长：照料 / 当日首次确认打钩 / 完成周复盘 */
+  growthCare: number
+  growthTick: number
+  growthRetro: number
+  /** 集体奖励解锁阈值（班级周进度 %） */
+  perkThresholdPct: number
+  /** 错题重测间隔天数 */
+  retestDelayDays: number
+  /** 新学生默认周关键结果格数 */
+  defaultKrTarget: number
+  /** 申报证据最少字数 */
+  evidenceMinLen: number
+}
+
+export const DEFAULT_RULES: RuleConfig = {
+  categoryPoints: { ...CATEGORY_POINTS },
+  dailyEarnCap: DAILY_EARN_CAP,
+  dailySpendCap: DAILY_SPEND_CAP,
+  dailyReportCap: DAILY_REPORT_CAP,
+  dailyReviewCap: DAILY_REVIEW_CAP,
+  auditMin: AUDIT_MIN,
+  auditMax: AUDIT_MAX,
+  honorWallMax: HONOR_WALL_MAX,
+  honorStreakMax: HONOR_STREAK_MAX,
+  squadBronze: 3,
+  squadSilver: 6,
+  squadGold: 10,
+  squadComboBonus: 3,
+  squadWeeklyCap: 30,
+  growthCare: GROWTH_CARE,
+  growthTick: GROWTH_TICK,
+  growthRetro: GROWTH_RETRO,
+  perkThresholdPct: 80,
+  retestDelayDays: RETEST_DELAY_DAYS,
+  defaultKrTarget: DEFAULT_KR_TARGET,
+  evidenceMinLen: EVIDENCE_MIN_LEN,
+}
+
+/** 读取当前生效规则（服务端注入；缺省用默认值，保证引擎纯函数可独立运行） */
+export function rulesOf(s: { rules?: RuleConfig }): RuleConfig {
+  return s.rules ?? DEFAULT_RULES
+}
