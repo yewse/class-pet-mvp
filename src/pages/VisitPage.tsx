@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { PetSvg } from '../components/PetSvg'
-import { social, toggleDnd } from '../store'
+import { confirmKrTick, pendingTicksOf, social, toggleDnd } from '../store'
 import { isClassHourLocked } from '../rules'
 import { showToast } from '../toast'
 import type { AppState } from '../types'
@@ -65,6 +65,14 @@ export function VisitPage({ state, meId }: { state: AppState; meId: string }) {
       </p>
       {locked && <p className="lock-banner">{CLASS_CARE}</p>}
       {msg && <p className={msg === CLASS_CARE || msg.includes('上课') ? 'lock-banner' : msg.includes('成功') || msg.includes('表情') || msg.includes('点心') || msg.includes('共训') && !msg.includes('不足') ? 'ok' : 'err'}>{msg}</p>}
+      {pendingTicksOf(state, to).map((k) => (
+        <div key={k.id} className="item">
+          待确认 · {k.note}{' '}
+          <button type="button" className="primary" onClick={() => { const e = confirmKrTick(k.id, meId); setMsg(e ?? '已确认'); showToast(e ?? '已确认') }}>
+            确认
+          </button>
+        </div>
+      ))}
       <div className="row wrap">
         <button type="button" disabled={locked} onClick={() => act('visit', '探望成功')}>探望 0</button>
         <button type="button" disabled={locked} onClick={() => act('emoji', '表情 0', '✨')}>表情 ✨ 0</button>

@@ -292,5 +292,7 @@ export function createSeed(): AppState {
     },
     classOkr: { weekId: week, objective: '作业准时率', doneCount: 1 },
     classSession: { active: false, deltas: {}, classKrMoved: false },
+    krTicks: [],
+    dailyMoods: [],
   }
 }

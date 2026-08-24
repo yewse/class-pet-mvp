@@ -11,6 +11,7 @@ export type Expression =
   | 'cheer'
   | 'shy'
   | 'missSoft'
+  | 'dormant'
 
 export type ReportCategory = 'quality' | 'correction' | 'quiz_self' | 'participation'
 export type ReportStatus =
@@ -197,6 +198,32 @@ export interface AppState {
   personalOkrs: Record<string, PersonalOkr>
   classOkr: ClassOkr
   classSession: ClassSession
+  krTicks: KrTick[]
+  dailyMoods: DailyMood[]
+}
+
+export type MoodId = 'sun' | 'overcast' | 'rain'
+
+export const MOOD_LABEL: Record<MoodId, string> = {
+  sun: '晴',
+  overcast: '云',
+  rain: '雨',
+}
+
+export interface DailyMood {
+  studentId: string
+  date: string
+  mood: MoodId
+}
+
+export interface KrTick {
+  id: string
+  studentId: string
+  weekId: string
+  date: string
+  note: string
+  status: 'pending' | 'confirmed'
+  confirmerId: string | null
 }
 
 export interface PersonalOkr {

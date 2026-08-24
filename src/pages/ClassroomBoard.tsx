@@ -4,10 +4,14 @@ import {
   adjustClassScore,
   CLASS_REASONS,
   classLayoutOf,
+  classMoodMix,
   classOkrOf,
   classOkrProgress,
+  displayExpr,
   endClassSession,
+  majorityRain,
   occupantAt,
+  pendingTicksOf,
   personalOkrOf,
   praiseWholeClass,
   sessionDeltaOf,
@@ -49,6 +53,8 @@ export function ClassroomBoard({ state }: { state: AppState }) {
   const classOkr = classOkrOf(state)
   const classPct = classOkrProgress(state)
   const inSession = !!state.classSession?.active
+  const mix = classMoodMix(state)
+  const tiredClass = majorityRain(state)
 
   useEffect(() => {
     if (!fx.length) return
@@ -121,6 +127,14 @@ export function ClassroomBoard({ state }: { state: AppState }) {
         </div>
       </div>
 
+      <div className="mood-mix">
+        <span>班级心情</span>
+        <span>晴 {mix.sun}</span>
+        <span>云 {mix.overcast}</span>
+        <span>雨 {mix.rain}</span>
+      </div>
+      {tiredClass && <p className="mood-banner">班级有点累，先看看大家</p>}
+
       <div className="class-okr-banner">
         <div className="class-okr-title">
           本周班级目标 · {classOkr.objective}
@@ -158,6 +172,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
           }
           const pet = state.pets.find((p) => p.ownerId === s.id)
           const okr = personalOkrOf(state, s.id)
+          const wait = pendingTicksOf(state, s.id).length
           const cardFx = fx.filter((f) => f.studentId === s.id)
           const last = cardFx[cardFx.length - 1]
           return (
@@ -180,7 +195,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
                   <PetSvg
                     species={pet.species}
                     face={pet.face}
-                    expression={last && last.n > 0 ? 'cheer' : pet.expression}
+                    expression={last && last.n > 0 ? 'cheer' : displayExpr(state, pet)}
                     skinId={pet.skinId}
                     mountId={pet.mountId}
                     paletteId={pet.paletteId}
@@ -196,6 +211,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
               {pet && <div className="board-petname">{pet.name || pet.nickname}</div>}
               <div className="board-okr">{okr.objective || '未设目标'}</div>
               <KrDots done={okr.krDone} target={okr.krTarget} />
+              {wait > 0 && <div className="pending-tag">待确认</div>}
             </button>
           )
         })}
@@ -204,12 +220,14 @@ export function ClassroomBoard({ state }: { state: AppState }) {
       {picked && (
         <div className="pad-mask" onClick={() => setPicked(null)}>
           <div className="score-pad" onClick={(e) => e.stopPropagation()}>
-            <h2>{picked.name}</h2>
+            <h2>核验 · {picked.name}</h2>
             <p className="muted">
-              {personalOkrOf(state, picked.id).objective || '未设个人目标'} · 本课记录{' '}
-              {sessionDeltaOf(picked.id) > 0 ? '+' : ''}
-              {sessionDeltaOf(picked.id)}（上限 +6 / −3）
+              {personalOkrOf(state, picked.id).objective || '未设个人目标'} · 本课核验次数{' '}
+              {sessionDeltaOf(picked.id)}（上限 6 / 3）
             </p>
+            {pendingTicksOf(state, picked.id).map((k) => (
+              <p key={k.id} className="pending-tag">待确认 · {k.note}</p>
+            ))}
             <KrDots
               done={personalOkrOf(state, picked.id).krDone}
               target={personalOkrOf(state, picked.id).krTarget}
@@ -217,24 +235,23 @@ export function ClassroomBoard({ state }: { state: AppState }) {
             <div className="row">
               {CLASS_REASONS.map((r) => (
                 <button key={r} type="button" className={reason === r ? 'on' : ''} onClick={() => setReason(r)}>
-                  {r}
+                  {r === '推进个人目标' ? '确认' : r === '帮助班级目标' ? '推进' : r}
                 </button>
               ))}
             </div>
             <div className="row pad-ops">
               {reason === '走神提醒' ? (
                 <button type="button" className="pad-minus" onClick={() => apply(picked.id, -1)}>
-                  −1
+                  提醒
+                </button>
+              ) : reason === '推进个人目标' ? (
+                <button type="button" className="primary" onClick={() => apply(picked.id, 1)}>
+                  确认
                 </button>
               ) : (
-                <>
-                  <button type="button" className="primary" onClick={() => apply(picked.id, 1)}>
-                    +1
-                  </button>
-                  <button type="button" className="primary" onClick={() => apply(picked.id, 2)}>
-                    +2
-                  </button>
-                </>
+                <button type="button" className="primary" onClick={() => apply(picked.id, 1)}>
+                  推进
+                </button>
               )}
             </div>
             <button type="button" onClick={() => setPicked(null)}>

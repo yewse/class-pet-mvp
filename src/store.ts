@@ -1,7 +1,7 @@
 import { createSeed, SHOP_ITEMS } from './seed'
-import type { AppState, ClassLayout, ClassOkr, ClassSession, Expression, FacePreset, PersonalOkr, Pet, ReportCategory, Seat, SpeciesId } from './types'
+import type { AppState, ClassLayout, ClassOkr, ClassSession, Expression, FacePreset, KrTick, MoodId, PersonalOkr, Pet, ReportCategory, Seat, SpeciesId } from './types'
 import { DEFAULT_LAYOUT, seatKey } from './types'
-import { SKIN_TO_CLOTHES, DEFAULT_KR_TARGET, SESSION_POS_CAP, SESSION_NEG_CAP } from './types'
+import { SKIN_TO_CLOTHES, DEFAULT_KR_TARGET, SESSION_POS_CAP, SESSION_NEG_CAP, MOOD_LABEL } from './types'
 import { BASE_PETS, basePetById, basePetForSpecies, COSMETICS, cosmeticById } from './catalog'
 import {
   CATEGORY_POINTS,
@@ -30,7 +30,8 @@ import {
 } from './rules'
 import type { HonorItem, HonorTier } from './types'
 
-const KEY = 'class-pet-mvp-v9'
+const KEY = 'class-pet-mvp-v10'
+const OLD_KEYS = ['class-pet-mvp-v9']
 
 const ONLY_CLASS = 'c1'
 
@@ -106,9 +107,50 @@ export function classOkrOf(s: AppState): ClassOkr {
 }
 
 export function classOkrProgress(s: AppState): number {
+  const roster = s.users.filter((u) => u.role === 'student' && u.classId === ONLY_CLASS)
+  if (!roster.length) return 0
+  const sum = roster.reduce((n, u) => {
+    const o = personalOkrOf(s, u.id)
+    return n + o.krDone / Math.max(1, o.krTarget)
+  }, 0)
+  return Math.min(100, Math.round((sum / roster.length) * 100))
+}
+
+export function pendingTicksOf(s: AppState, studentId?: string): KrTick[] {
+  const week = weekIdOf(s)
+  return (s.krTicks ?? []).filter(
+    (k) => k.weekId === week && k.status === 'pending' && (!studentId || k.studentId === studentId),
+  )
+}
+
+export function moodOf(s: AppState, studentId: string): MoodId | null {
+  const today = todayStr(s)
+  return (s.dailyMoods ?? []).find((m) => m.studentId === studentId && m.date === today)?.mood ?? null
+}
+
+export function classMoodMix(s: AppState): Record<MoodId, number> {
+  const today = todayStr(s)
+  const mix: Record<MoodId, number> = { sun: 0, overcast: 0, rain: 0 }
+  for (const m of s.dailyMoods ?? []) {
+    if (m.date === today) mix[m.mood] += 1
+  }
+  return mix
+}
+
+export function majorityRain(s: AppState): boolean {
   const roster = s.users.filter((u) => u.role === 'student' && u.classId === ONLY_CLASS).length
-  if (!roster) return 0
-  return Math.min(100, Math.round((classOkrOf(s).doneCount / roster) * 100))
+  const rain = classMoodMix(s).rain
+  return roster > 0 && rain * 2 >= roster
+}
+
+export function classWeekBehind(s: AppState): boolean {
+  return classOkrProgress(s) < 50
+}
+
+export function displayExpr(s: AppState, pet: Pet, weekView = false): Expression {
+  if (weekView && classWeekBehind(s)) return 'dormant'
+  if (majorityRain(s)) return 'tired'
+  return pet.expression
 }
 
 function syncOkrs(s: AppState): AppState {
@@ -126,7 +168,14 @@ function syncOkrs(s: AppState): AppState {
   }
   const classOkr = classOkrOf({ ...s, personalOkrs })
   const classSession: ClassSession = s.classSession ?? { active: false, deltas: {}, classKrMoved: false }
-  return { ...s, personalOkrs, classOkr, classSession }
+  return {
+    ...s,
+    personalOkrs,
+    classOkr,
+    classSession,
+    krTicks: s.krTicks ?? [],
+    dailyMoods: s.dailyMoods ?? [],
+  }
 }
 
 function migrate(s: AppState): AppState {
@@ -180,12 +229,20 @@ function migrate(s: AppState): AppState {
     personalOkrs: s.personalOkrs ?? seed.personalOkrs,
     classOkr: s.classOkr ?? seed.classOkr,
     classSession: s.classSession ?? seed.classSession,
+    krTicks: s.krTicks ?? seed.krTicks ?? [],
+    dailyMoods: s.dailyMoods ?? seed.dailyMoods ?? [],
   })
 }
 
 function load(): AppState {
   try {
-    const raw = localStorage.getItem(KEY)
+    let raw = localStorage.getItem(KEY)
+    if (!raw) {
+      for (const k of OLD_KEYS) {
+        raw = localStorage.getItem(k)
+        if (raw) break
+      }
+    }
     if (raw) {
       const parsed = JSON.parse(raw) as AppState
       return boot(migrate(parsed))
@@ -232,6 +289,7 @@ export function subscribe(fn: () => void) {
 
 export function resetDemo() {
   localStorage.removeItem(KEY)
+  for (const k of OLD_KEYS) localStorage.removeItem(k)
   state = boot(createSeed())
   persist()
 }
@@ -437,6 +495,7 @@ export function addStudent(name: string): string | null {
     users: [...state.users, { id, name: n, role: 'student', code: 'student', classId: ONLY_CLASS, dnd: false, seat }],
     classScores: { ...state.classScores, [id]: 0 },
     personalOkrs: { ...state.personalOkrs, [id]: emptyPersonalOkr(weekIdOf(state), FALLBACK_O[0]) },
+    krTicks: state.krTicks ?? [],
   })
   return null
 }
@@ -865,6 +924,86 @@ export function transferBlocked() {
 }
 
 
+export function setDailyMood(studentId: string, mood: MoodId): string | null {
+  const u = state.users.find((x) => x.id === studentId)
+  if (!u || u.role !== 'student') return '只有学生能记心情'
+  const today = todayStr(state)
+  const dailyMoods = (state.dailyMoods ?? []).filter((m) => !(m.studentId === studentId && m.date === today))
+  dailyMoods.push({ studentId, date: today, mood })
+  let pets = state.pets
+  if (majorityRain({ ...state, dailyMoods })) {
+    pets = pets.map((p) => ({ ...p, expression: 'tired' as Expression }))
+  }
+  set({ ...state, dailyMoods, pets })
+  return null
+}
+
+export function submitKrTick(studentId: string, note: string): string | null {
+  const u = state.users.find((x) => x.id === studentId)
+  if (!u || u.role !== 'student') return '只有学生能勾选自己的关键结果'
+  const n = note.trim()
+  if (!n) return '打钩需要一句短证据'
+  if (n.length > 24) return '证据请控制在 24 字内'
+  if (!/[一-鿿]/.test(n)) return '请用简短中文写下证据'
+  const cur = personalOkrOf(state, studentId)
+  const pending = pendingTicksOf(state, studentId).length
+  if (cur.krDone + pending >= cur.krTarget) return '本周关键结果已满或已有待确认'
+  const week = weekIdOf(state)
+  const tick: KrTick = {
+    id: uid('kt'),
+    studentId,
+    weekId: week,
+    date: todayStr(state),
+    note: n,
+    status: 'pending',
+    confirmerId: null,
+  }
+  set({ ...state, krTicks: [...(state.krTicks ?? []), tick] })
+  return null
+}
+
+function creditConfirmedTick(s: AppState, studentId: string): AppState {
+  const today = todayStr(s)
+  const cur = personalOkrOf(s, studentId)
+  if (cur.krDone >= cur.krTarget) return s
+  const grew = cur.lastTickDate !== today
+  const personalOkrs = {
+    ...s.personalOkrs,
+    [studentId]: { ...cur, krDone: cur.krDone + 1, lastTickDate: today },
+  }
+  const pets = s.pets.map((p) => {
+    if (p.ownerId !== studentId) return p
+    return {
+      ...p,
+      growth: grew ? p.growth + 8 : p.growth,
+      mood: Math.min(100, p.mood + 4),
+      expression: 'cheer' as Expression,
+    }
+  })
+  return { ...s, personalOkrs, pets }
+}
+
+export function confirmKrTick(tickId: string, confirmerId: string): string | null {
+  const tick = (state.krTicks ?? []).find((k) => k.id === tickId)
+  if (!tick) return '没有这条勾选'
+  if (tick.status === 'confirmed') return '已经确认过了'
+  if (tick.studentId === confirmerId) return '不能确认自己的勾选'
+  const who = state.users.find((u) => u.id === confirmerId)
+  if (!who || (who.role !== 'student' && who.role !== 'teacher')) return '只有同学或老师能确认'
+  if (who.role === 'student' && who.classId !== state.users.find((u) => u.id === tick.studentId)?.classId) {
+    return '只能确认本班同学'
+  }
+  let s: AppState = {
+    ...state,
+    krTicks: (state.krTicks ?? []).map((k) =>
+      k.id === tickId ? { ...k, status: 'confirmed' as const, confirmerId } : k,
+    ),
+  }
+  s = creditConfirmedTick(s, tick.studentId)
+  set(s)
+  return null
+}
+
 export const CLASS_REASONS = ['推进个人目标', '帮助班级目标', '走神提醒'] as const
 export type ClassReason = (typeof CLASS_REASONS)[number]
 
@@ -971,6 +1110,19 @@ export function adjustClassScore(studentId: string, delta: number, reason: strin
   let classKrMoved = s.classSession!.classKrMoved
   let pets = s.pets
   if (reason === '推进个人目标' && delta > 0) {
+    const pending = pendingTicksOf(s, studentId)
+    if (pending.length) {
+      const take = pending.slice(0, Math.max(1, delta))
+      s = {
+        ...s,
+        krTicks: (s.krTicks ?? []).map((k) =>
+          take.some((x) => x.id === k.id) ? { ...k, status: 'confirmed' as const, confirmerId: 't1' } : k,
+        ),
+      }
+      for (const _ of take) s = creditConfirmedTick(s, studentId)
+      personalOkrs = s.personalOkrs
+      pets = s.pets
+    } else {
     const cur = personalOkrOf(s, studentId)
     const ticks = Math.min(delta, Math.max(0, cur.krTarget - cur.krDone))
     if (ticks <= 0) return '个人关键结果已满'
@@ -992,6 +1144,7 @@ export function adjustClassScore(studentId: string, delta: number, reason: strin
           ? { ...p, mood: Math.min(100, p.mood + 4), expression: 'cheer' as Expression }
           : p,
       )
+    }
     }
   } else if (reason === '帮助班级目标' && delta > 0) {
     classOkr = { ...classOkr, doneCount: classOkr.doneCount + 1 }
@@ -1019,7 +1172,7 @@ export function adjustClassScore(studentId: string, delta: number, reason: strin
         date: today,
         delta: 0,
         kind: delta >= 0 ? 'earn' : 'reverse',
-        reason: `${reason} ${delta > 0 ? '+' : ''}${delta}`,
+        reason: `核验 · ${reason}`,
       },
     ],
   })
@@ -1050,4 +1203,4 @@ export function praiseWholeClass(reason = '全班表扬'): string | null {
   return null
 }
 
-export { SHOP_ITEMS, balance, BASE_PETS, COSMETICS }
+export { SHOP_ITEMS, balance, BASE_PETS, COSMETICS, MOOD_LABEL }

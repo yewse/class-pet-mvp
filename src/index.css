@@ -515,3 +515,14 @@ button.secondary {
 .board-bar-ops { display: flex; gap: 8px; align-items: center; }
 .board-live { font-size: 14px; margin-top: 4px; color: #d8c8a0; font-weight: 500; }
 .board-live strong { font-size: 16px; font-weight: 700; }
+
+.pet-dormant { filter: grayscale(0.25) brightness(0.82); }
+.expr-dormant .pet-react, .expr-dormant .pet-head { animation: none; }
+.mood-mix { display: flex; gap: 14px; align-items: center; color: #ffe7b0; margin-bottom: 8px; font-size: 18px; }
+.mood-banner { background: #3a3048; color: #ffe7b0; padding: 8px 12px; border-radius: 10px; margin: 0 0 10px; }
+.pending-tag { color: #c98a18; font-size: 13px; margin: 4px 0; }
+.kr-dots span.pending { background: #f4d48a; box-shadow: 0 0 0 2px #c98a18; }
+.week-rest { background: #fff4cc; padding: 10px 12px; border-radius: 10px; }
+.week-pets { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.week-pet { text-align: center; font-size: 13px; }
+.mood-row button { min-width: 44px; }

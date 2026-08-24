@@ -1,7 +1,12 @@
 import { useState } from 'react'
+import { PetSvg } from '../components/PetSvg'
 import {
   classOkrOf,
   classOkrProgress,
+  classWeekBehind,
+  confirmKrTick,
+  displayExpr,
+  pendingTicksOf,
   personalOkrOf,
   setClassObjective,
   setStudentKrTarget,
@@ -35,9 +40,36 @@ export function GoalsPage({ state }: { state: AppState }) {
           保存班级目标
         </button>
         <p className="muted">
-          当前进度 {classOkrProgress(state)} / 100（{classOkr.doneCount}/{students.length}）
+          当前进度 {classOkrProgress(state)} / 100（已确认勾选的平均完成率）
         </p>
+        {classWeekBehind(state) && (
+          <p className="week-rest">目标没到，全班一起复盘，不是谁的错。</p>
+        )}
         {msg && <p className={msg.startsWith('已') ? 'ok' : 'err'}>{msg}</p>}
+        <div className="week-pets">
+          {students.map((s) => {
+            const pet = state.pets.find((p) => p.ownerId === s.id)
+            if (!pet) return null
+            return (
+              <div key={s.id} className="week-pet">
+                <PetSvg
+                  compact
+                  species={pet.species}
+                  face={pet.face}
+                  expression={displayExpr(state, pet, true)}
+                  skinId={pet.skinId}
+                  mountId={pet.mountId}
+                  paletteId={pet.paletteId}
+                  marking={pet.marking}
+                  headwearId={pet.headwearId}
+                  clothesId={pet.clothesId}
+                  shoesId={pet.shoesId}
+                />
+                <div>{s.name}</div>
+              </div>
+            )
+          })}
+        </div>
       </div>
       <div className="card">
         <h3>个人目标</h3>
@@ -64,10 +96,21 @@ export function GoalsPage({ state }: { state: AppState }) {
                     />
                   </td>
                   <td>
-                    {okr.krDone}/{okr.krTarget}{' '}
+                    {okr.krDone}/{okr.krTarget}
+                    {pendingTicksOf(state, s.id).length ? ' · 待确认' : ''}{' '}
                     <button type="button" onClick={() => setStudentKrTarget(s.id, okr.krTarget === 4 ? 6 : 4)}>
                       {okr.krTarget} 格
                     </button>
+                    {pendingTicksOf(state, s.id).map((k) => (
+                      <button
+                        key={k.id}
+                        type="button"
+                        className="primary"
+                        onClick={() => setMsg(confirmKrTick(k.id, 't1') ?? `已确认 ${s.name}`)}
+                      >
+                        确认
+                      </button>
+                    ))}
                   </td>
                   <td>
                     <button

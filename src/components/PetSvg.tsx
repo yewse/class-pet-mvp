@@ -46,7 +46,7 @@ const SKIN_TINT: Record<string, string> = {
 }
 
 function eyeKind(expr: Expression) {
-  if (expr === 'tired' || expr === 'calm') return 'line'
+  if (expr === 'tired' || expr === 'calm' || expr === 'dormant') return 'line'
   if (expr === 'cheer' || expr === 'happy') return 'arc'
   if (expr === 'focus') return 'narrow'
   return 'round'
@@ -95,7 +95,7 @@ function Mouth({ expr, x, y, line }: { expr: Expression; x: number; y: number; l
   if (expr === 'shy') {
     return <path d={`M${x - 4} ${y} q 4 3 8 0`} stroke={line} fill="none" strokeWidth="2" />
   }
-  if (expr === 'tired') {
+  if (expr === 'tired' || expr === 'dormant') {
     return <line x1={x - 5} y1={y} x2={x + 5} y2={y} stroke={line} strokeWidth="2" />
   }
   if (expr === 'focus') {
@@ -265,9 +265,10 @@ export function PetSvg(props: {
       width={size}
       height={size}
       viewBox="0 0 200 200"
-      className={`pet-svg expr-${props.expression}`}
+      className={`pet-svg expr-${props.expression}${props.expression === 'dormant' ? ' pet-dormant' : ''}`}
       role="img"
-      aria-label="班级宠物"
+      aria-label={props.expression === 'dormant' ? '休眠宠物' : '班级宠物'}
+      opacity={props.expression === 'dormant' ? 0.55 : 1}
     >
       {showMount && (
         <g className="layer-mount">
