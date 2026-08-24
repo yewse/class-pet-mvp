@@ -280,6 +280,30 @@ export function ClassroomBoard({ state, meRole }: { state: AppState; meRole: Rol
         })}
       </div>
 
+      {roster.filter((s) => !s.seat).map((s) => {
+        const pet = state.pets.find((p) => p.ownerId === s.id)
+        return (
+          <div key={`unseated-${s.id}`} className="board-card desk" style={{ marginTop: '1rem' }}>
+            <div className="board-name">{s.name}（未排座）</div>
+            <div className="board-pet-slot">
+              {pet ? (
+                <PetSvg
+                  species={pet.species}
+                  face={pet.face}
+                  expression="idle"
+                  growth={pet.growth}
+                  paletteId={pet.paletteId}
+                  marking={pet.marking}
+                />
+              ) : (
+                <div className="muted">尚未领养</div>
+              )}
+            </div>
+            {pet && <div className="board-petname">{pet.name || pet.nickname}</div>}
+          </div>
+        )
+      })}
+
       {picked && staff && (
         <div className="pad-mask" onClick={() => setPicked(null)}>
           <div className="score-pad pad-slim" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={picked.name}>

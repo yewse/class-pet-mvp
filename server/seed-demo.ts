@@ -241,6 +241,10 @@ function classTwoState(): AppState {
   const s = emptyClassState(C2, '初二（4）班', staff)
   const kids = STUDENTS.filter((x) => x.classId === C2)
   s.users = [...s.users, ...kids.map((k, i) => studentUser(k, i))]
+  s.pets = [
+    pet('pet5', 's-han', 'cat', '喵喵', 0, '静静思考', 36),
+    pet('pet6', 's-qin', 'dog', '旺旺', 1, '开心每一天', 24),
+  ]
   return s
 }
 

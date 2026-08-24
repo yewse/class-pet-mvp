@@ -272,6 +272,34 @@ export function registerAdminRoutes(app: Express) {
     res.json({ ok: true, result: { rules: getRules() } })
   })
 
+  app.post('/api/admin/delete-teacher', (req, res) => {
+    const me = requireAdmin(req, res)
+    if (!me) return
+    const p = z.object({ teacherId: z.string().max(40) }).safeParse(req.body)
+    if (!p.success) {
+      res.status(400).json({ error: '参数不合法' })
+      return
+    }
+    const t = db.prepare("SELECT * FROM accounts WHERE id = ? AND role IN ('homeroom','subject')").get(p.data.teacherId) as AccountRow | undefined
+    if (!t) {
+      res.status(404).json({ error: '教师不存在' })
+      return
+    }
+    db.transaction(() => {
+      db.prepare('DELETE FROM accounts WHERE id = ?').run(t.id)
+      destroyAccountSessions(t.id)
+      const classIds = t.classIds ? (JSON.parse(t.classIds) as string[]) : t.classId ? [t.classId] : []
+      for (const cid of classIds) {
+        const s = loadRawState(cid)
+        if (!s) continue
+        const updatedUsers = s.users.filter((u) => u.id !== t.id)
+        saveClassState(cid, { ...s, users: updatedUsers })
+      }
+    })()
+    appendEvent({ actorId: me.id, classId: null, type: 'adminDeleteTeacher', payload: { teacherId: t.id }, ok: true })
+    res.json({ ok: true })
+  })
+
   app.post('/api/admin/school-name', (req, res) => {
     const me = requireAdmin(req, res)
     if (!me) return
