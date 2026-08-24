@@ -1,4 +1,18 @@
-export type Role = 'teacher' | 'student' | 'parent' | 'school'
+export type Role = 'homeroom' | 'subject' | 'student'
+
+export const ROLE_ZH: Record<Role, string> = {
+  homeroom: '班主任',
+  subject: '任课教师',
+  student: '学生',
+}
+
+export function isStaffRole(role: string): boolean {
+  return role === 'homeroom' || role === 'subject'
+}
+
+export function isHomeroomRole(role: string): boolean {
+  return role === 'homeroom'
+}
 export type SpeciesId = 'fox' | 'owl' | 'otter' | 'cat' | 'dog' | 'rabbit' | 'panda' | 'deer' | 'penguin' | 'bear'
 export type PaletteId = 'chi' | 'qing' | 'mo'
 export type MarkingId = 'none' | 'stripe' | 'spots'

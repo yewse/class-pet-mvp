@@ -83,7 +83,7 @@ header { gap: 10px; }
 .home-ach { margin: 0; padding-left: 18px; }
 .home-ach li { margin-bottom: 4px; }
 .class-switch { display: flex; gap: 6px; }
-.role-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.role-chips { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 .role-chip {
   display: flex;
   flex-direction: column;

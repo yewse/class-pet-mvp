@@ -23,6 +23,7 @@ import {
 import { showToast } from '../toast'
 import { DEFAULT_CLASS_PERK } from '../types'
 import type { AppState, User } from '../types'
+import { isHomeroomRole } from '../types'
 
 type Fx = { id: number; studentId: string; kind: 'up' | 'down' | 'all'; n: number }
 
@@ -55,6 +56,8 @@ export function ClassroomBoard({ state }: { state: AppState }) {
     }
   })
 
+  const actor = state.session ? state.users.find((u) => u.id === state.session!.userId) : undefined
+  const homeroom = isHomeroomRole(actor?.role ?? '')
   const classOkr = classOkrOf(state)
   const classPct = classOkrProgress(state)
   const perk = classPerkOf(state)
@@ -145,9 +148,11 @@ export function ClassroomBoard({ state }: { state: AppState }) {
               上课
             </button>
           )}
+          {homeroom && (
           <button type="button" className="primary" onClick={markAllBase}>
             全班基础达标
           </button>
+          )}
           <button
             className="board-praise"
             type="button"
@@ -179,7 +184,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
           </span>
         </div>
         <p className="muted">进度 = 本周每日基础达标人次 ÷（人数 × 工作日）。个人贡献只计确认过的努力勾选，不计考试分。</p>
-        {classPct >= 80 && !perk && (
+        {homeroom && classPct >= 80 && !perk && (
           <form
             className="row perk-row"
             onSubmit={(e) => {

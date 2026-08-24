@@ -1,5 +1,6 @@
 import { createSeed, SHOP_ITEMS } from './seed'
-import type { AppState, BaseHabit, ClassLayout, ClassOkr, ClassSession, Expression, FacePreset, KrTick, MoodId, PersonalOkr, Pet, ReportCategory, Seat, SpeciesId } from './types'
+import type { AppState, BaseHabit, ClassLayout, ClassOkr, ClassSession, Expression, FacePreset, KrTick, MoodId, PersonalOkr, Pet, ReportCategory, Role, Seat, SpeciesId } from './types'
+import { isHomeroomRole, isStaffRole } from './types'
 import { DEFAULT_LAYOUT, seatKey } from './types'
 import { SKIN_TO_CLOTHES, DEFAULT_KR_TARGET, DEFAULT_CLASS_PERK, REFLECT_CHIP, SESSION_POS_CAP, SESSION_NEG_CAP, MOOD_LABEL } from './types'
 import { BASE_PETS, basePetById, basePetForSpecies, COSMETICS, cosmeticById } from './catalog'
@@ -34,10 +35,39 @@ import {
 } from './rules'
 import type { HonorItem, HonorTier } from './types'
 
-const KEY = 'class-pet-mvp-v12'
-const OLD_KEYS = ['class-pet-mvp-v11', 'class-pet-mvp-v10', 'class-pet-mvp-v9']
+const KEY = 'class-pet-mvp-v13'
+const OLD_KEYS = ['class-pet-mvp-v12', 'class-pet-mvp-v11', 'class-pet-mvp-v10', 'class-pet-mvp-v9']
 
 const ONLY_CLASS = 'c1'
+
+function normalizeRole(role: string): Role | null {
+  if (role === 'teacher' || role === 'homeroom') return 'homeroom'
+  if (role === 'subject') return 'subject'
+  if (role === 'student') return 'student'
+  return null
+}
+
+function sessionUser() {
+  const id = state.session?.userId
+  return id ? state.users.find((u) => u.id === id) : undefined
+}
+
+function requireHomeroom(): string | null {
+  const u = sessionUser()
+  if (!u || !isHomeroomRole(u.role)) return '仅班主任可操作'
+  return null
+}
+
+function requireStaff(): string | null {
+  const u = sessionUser()
+  if (!u || !isStaffRole(u.role)) return '仅教师可操作'
+  return null
+}
+
+function staffConfirmerId(): string {
+  return sessionUser()?.id ?? 't1'
+}
+
 
 const CHI_CHI_MOTTO = '赤心向前'
 
@@ -206,21 +236,33 @@ function migrate(s: AppState): AppState {
   const savedById = new Map((s.users ?? []).map((u) => [u.id, u]))
   const seedUsers = seed.users.map((su) => {
     const old = savedById.get(su.id)
-    if (!old) return { ...su, classId: ONLY_CLASS, classIds: su.role === 'teacher' ? [ONLY_CLASS] : su.classIds }
+    if (!old) return { ...su, classId: ONLY_CLASS, classIds: isStaffRole(su.role) ? [ONLY_CLASS] : su.classIds }
+    const role = normalizeRole(old.role) ?? su.role
     return {
       ...su,
+      role,
+      code: role,
       dnd: old.dnd,
       name: old.name || su.name,
       seat: old.seat ?? su.seat,
       classId: ONLY_CLASS,
-      classIds: su.role === 'teacher' ? [ONLY_CLASS] : su.classIds,
+      classIds: isStaffRole(role) ? [ONLY_CLASS] : su.classIds,
     }
   })
   const seedIds = new Set(seed.users.map((u) => u.id))
-  const extras = (s.users ?? []).filter((u) => !seedIds.has(u.id)).map((u) => ({
-    ...u,
-    classId: u.role === 'student' || u.role === 'teacher' ? ONLY_CLASS : u.classId,
-  }))
+  const extras = (s.users ?? [])
+    .filter((u) => !seedIds.has(u.id))
+    .map((u) => {
+      const role = normalizeRole(u.role)
+      if (!role) return null
+      return {
+        ...u,
+        role,
+        code: role,
+        classId: role === 'student' || isStaffRole(role) ? ONLY_CLASS : u.classId,
+      }
+    })
+    .filter((u): u is NonNullable<typeof u> => !!u)
   const users = assignMissingSeats([...seedUsers, ...extras], s.classLayout ?? seed.classLayout ?? DEFAULT_LAYOUT)
   const studentIds = new Set(users.filter((u) => u.role === 'student').map((u) => u.id))
   let pets = (s.pets ?? []).filter((p) => studentIds.has(p.ownerId)).map(normalizePet)
@@ -238,9 +280,10 @@ function migrate(s: AppState): AppState {
     const saved = s.classScores?.[id]
     classScores[id] = typeof saved === 'number' ? saved : (seed.classScores?.[id] ?? 0)
   }
-  const session = s.session
+  let session = s.session
     ? { userId: s.session.userId, viewClassId: ONLY_CLASS }
     : null
+  if (session && !users.some((u) => u.id === session!.userId)) session = null
   return syncOkrs({
     ...s,
     schoolName: s.schoolName ?? seed.schoolName,
@@ -326,6 +369,7 @@ export function subscribe(fn: () => void) {
 }
 
 export function resetDemo() {
+  if (requireHomeroom()) return
   localStorage.removeItem(KEY)
   for (const k of OLD_KEYS) localStorage.removeItem(k)
   state = boot(createSeed())
@@ -334,7 +378,7 @@ export function resetDemo() {
 
 export function login(role: AppState['users'][0]['role'], name: string): string | null {
   const u = state.users.find((x) => x.role === role && x.name === name.trim())
-  if (!u) return '姓名与角色不匹配。演示：叶老师 / 林小舟 / 林妈妈'
+  if (!u) return '姓名与角色不匹配。演示：叶老师 / 王老师 / 林小舟'
   set({ ...state, session: { userId: u.id, viewClassId: ONLY_CLASS } })
   return null
 }
@@ -351,6 +395,8 @@ export function teacherClassIds(user: AppState['users'][0] | undefined): string[
 }
 
 export function leaveClassWipe(studentId: string) {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const u = state.users.find((x) => x.id === studentId)
   if (!u || u.role !== 'student') return '只能清退学生'
   const reportIds = new Set(state.reports.filter((r) => r.authorId === studentId).map((r) => r.id))
@@ -504,6 +550,8 @@ export function occupantAt(users: AppState['users'], row: number, col: number) {
 
 /** 调座：空位直接落座；已被占用则互换。 */
 export function assignSeat(studentId: string, row: number, col: number): string | null {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const layout = classLayoutOf(state)
   if (row < 1 || col < 1 || row > layout.rows || col > layout.cols) return '座位超出教室范围'
   const me = state.users.find((x) => x.id === studentId)
@@ -522,6 +570,8 @@ export function assignSeat(studentId: string, row: number, col: number): string 
 }
 
 export function addStudent(name: string): string | null {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const n = name.trim()
   if (!n) return '姓名必填'
   if (state.users.some((u) => u.role === 'student' && u.name === n)) return '姓名已在花名册中'
@@ -540,6 +590,8 @@ export function addStudent(name: string): string | null {
 }
 
 export function renameStudent(studentId: string, name: string): string | null {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const n = name.trim()
   if (!n) return '姓名必填'
   const u = state.users.find((x) => x.id === studentId)
@@ -553,6 +605,8 @@ export function renameStudent(studentId: string, name: string): string | null {
 }
 
 export function deleteStudent(studentId: string): string | null {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const err = leaveClassWipe(studentId)
   if (err) return err
   const classScores = { ...state.classScores }
@@ -667,6 +721,8 @@ export function peerReview(reviewerId: string, reportId: string, verdict: 'fact'
 }
 
 export function teacherAudit(reportId: string, action: 'approve' | 'reject') {
+  const denied = requireStaff()
+  if (denied) return denied
   const today = todayStr(state)
   const report = state.reports.find((r) => r.id === reportId)
   if (!report || report.credited) return '无法处理'
@@ -859,6 +915,8 @@ function applyAchievements(s: AppState): AppState {
 }
 
 export function settleHonor(studentId: string, label: string) {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const week = currentWeek()
   if (honorsInWeek(state.honors, week) >= HONOR_WALL_MAX) return '本周荣誉橱窗最多 6 席'
   if (!honorAllowed(state.honors, studentId, week)) {
@@ -872,6 +930,8 @@ export function settleHonor(studentId: string, label: string) {
 }
 
 export function settleCurrentWeek() {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const week = currentWeek()
   if (alreadySettled(state, week)) return '本周已结算'
   set(applyAchievements(applyHonorForWeek(ensureSquadRows(state, week), week)))
@@ -879,6 +939,8 @@ export function settleCurrentWeek() {
 }
 
 export function advanceWeek() {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const today = todayStr(state)
   const nextDay = addDays(today, 7)
   const prev = currentWeek()
@@ -892,6 +954,7 @@ export function advanceWeek() {
 }
 
 export function toggleClassHour(classId: string) {
+  if (requireStaff()) return
   set({
     ...state,
     inClassHour: { ...state.inClassHour, [classId]: !state.inClassHour?.[classId] },
@@ -1030,7 +1093,7 @@ export function confirmKrTick(tickId: string, confirmerId: string): string | nul
   if (tick.status === 'confirmed') return '已经确认过了'
   if (tick.studentId === confirmerId) return '不能确认自己的勾选'
   const who = state.users.find((u) => u.id === confirmerId)
-  if (!who || (who.role !== 'student' && who.role !== 'teacher')) return '只有同学或老师能确认'
+  if (!who || (who.role !== 'student' && !isStaffRole(who.role))) return '只有同学或老师能确认'
   if (who.role === 'student' && who.classId !== state.users.find((u) => u.id === tick.studentId)?.classId) {
     return '只能确认本班同学'
   }
@@ -1047,6 +1110,8 @@ export function confirmKrTick(tickId: string, confirmerId: string): string | nul
 
 
 export function markClassBaseDone(): string | null {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const week = weekIdOf(state)
   const today = todayStr(state)
   const roster = state.users.filter((u) => u.role === 'student' && u.classId === ONLY_CLASS)
@@ -1072,6 +1137,8 @@ export function markClassBaseDone(): string | null {
 }
 
 export function excludeStudentBase(studentId: string): string | null {
+  const denied = requireStaff()
+  if (denied) return denied
   const u = state.users.find((x) => x.id === studentId)
   if (!u || u.role !== 'student') return '只能标记学生'
   const today = todayStr(state)
@@ -1095,10 +1162,12 @@ export function excludeStudentBase(studentId: string): string | null {
 }
 
 export function confirmBreakthrough(studentId: string, note: string): string | null {
+  const denied = requireStaff()
+  if (denied) return denied
   const u = state.users.find((x) => x.id === studentId)
   if (!u || u.role !== 'student') return '只能给学生记特别突破'
   const pending = pendingTicksOf(state, studentId)
-  if (pending.length) return confirmKrTick(pending[0].id, 't1')
+  if (pending.length) return confirmKrTick(pending[0].id, staffConfirmerId())
   const n = note.trim()
   if (!n) return '特别突破需要已有证据，或写一句备注'
   if (n.length > 24) return '备注请控制在 24 字内'
@@ -1113,7 +1182,7 @@ export function confirmBreakthrough(studentId: string, note: string): string | n
     date: todayStr(state),
     note: n,
     status: 'confirmed',
-    confirmerId: 't1',
+    confirmerId: staffConfirmerId(),
   }
   let s: AppState = { ...state, krTicks: [...(state.krTicks ?? []), tick] }
   s = creditConfirmedTick(s, studentId)
@@ -1122,6 +1191,8 @@ export function confirmBreakthrough(studentId: string, note: string): string | n
 }
 
 export function grantClassPerk(text: string): string | null {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const pct = classOkrProgress(state)
   if (pct < 80) return '班级周关键结果未到 80%，还不能发集体奖励'
   const o = classOkrOf(state)
@@ -1155,12 +1226,16 @@ function ensureSession(s: AppState): AppState {
 }
 
 export function startClassSession(): string | null {
+  const denied = requireStaff()
+  if (denied) return denied
   if (state.classSession?.active) return '本课已开始'
   set(ensureSession(state))
   return null
 }
 
 export function endClassSession(): string | null {
+  const denied = requireStaff()
+  if (denied) return denied
   set({
     ...state,
     classSession: { active: false, deltas: {}, classKrMoved: false },
@@ -1178,6 +1253,8 @@ function applySessionCap(s: AppState, studentId: string, delta: number): string 
 }
 
 export function setStudentObjective(studentId: string, objective: string): string | null {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const u = state.users.find((x) => x.id === studentId)
   if (!u || u.role !== 'student') return '只能改学生目标'
   const o = objective.trim()
@@ -1192,6 +1269,8 @@ export function setStudentObjective(studentId: string, objective: string): strin
 }
 
 export function setStudentKrTarget(studentId: string, n: number): string | null {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const u = state.users.find((x) => x.id === studentId)
   if (!u || u.role !== 'student') return '只能改学生关键结果'
   const t = Math.max(1, Math.min(12, Math.round(n) || DEFAULT_KR_TARGET))
@@ -1204,6 +1283,8 @@ export function setStudentKrTarget(studentId: string, n: number): string | null 
 }
 
 export function setClassObjective(objective: string): string | null {
+  const denied = requireHomeroom()
+  if (denied) return denied
   const o = objective.trim()
   if (!o) return '班级目标不能为空'
   if (o.length > 16) return '目标请控制在 16 字内'
@@ -1213,6 +1294,8 @@ export function setClassObjective(objective: string): string | null {
 }
 
 export function tapClassKr(n = 1): string | null {
+  const denied = requireStaff()
+  if (denied) return denied
   let s = ensureSession(state)
   const nextCount = Math.max(0, classOkrOf(s).doneCount + n)
   const cur = classOkrOf(s)
@@ -1226,6 +1309,8 @@ export function tapClassKr(n = 1): string | null {
 
 /** 记分板：理由对应个人 / 班级 OKR，本课上限 +6 / −3 */
 export function adjustClassScore(studentId: string, delta: number, reason: string): string | null {
+  const denied = requireStaff()
+  if (denied) return denied
   const u = state.users.find((x) => x.id === studentId)
   if (!u || u.role !== 'student') return '只能给学生记课堂记录'
   if (!CLASS_REASONS.includes(reason as ClassReason)) return '请选择与目标相关的理由'
@@ -1246,7 +1331,7 @@ export function adjustClassScore(studentId: string, delta: number, reason: strin
       s = {
         ...s,
         krTicks: (s.krTicks ?? []).map((k) =>
-          take.some((x) => x.id === k.id) ? { ...k, status: 'confirmed' as const, confirmerId: 't1' } : k,
+          take.some((x) => x.id === k.id) ? { ...k, status: 'confirmed' as const, confirmerId: staffConfirmerId() } : k,
         ),
       }
       for (const _ of take) s = creditConfirmedTick(s, studentId)
@@ -1308,6 +1393,8 @@ export function adjustClassScore(studentId: string, delta: number, reason: strin
 }
 
 export function praiseWholeClass(reason = '全班表扬'): string | null {
+  const denied = requireStaff()
+  if (denied) return denied
   let s = ensureSession(state)
   if (!s.classSession?.classKrMoved) return '本课班级目标尚未推进，暂不可全班表扬'
   const students = s.users.filter((u) => u.role === 'student' && u.classId === 'c1')

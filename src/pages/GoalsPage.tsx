@@ -128,7 +128,7 @@ export function GoalsPage({ state }: { state: AppState }) {
                         key={k.id}
                         type="button"
                         className="primary"
-                        onClick={() => setMsg(confirmKrTick(k.id, 't1') ?? `已确认 ${s.name}`)}
+                        onClick={() => setMsg(confirmKrTick(k.id, state.session?.userId ?? 't1') ?? `已确认 ${s.name}`)}
                       >
                         确认
                       </button>

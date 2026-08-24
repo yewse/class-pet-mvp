@@ -65,12 +65,12 @@ export function createSeed(): AppState {
   const week = weekIdFromDate(today)
   const prevWeek = weekIdFromDate(addDays(today, -7))
   const users: User[] = [
-    { id: 't1', name: '叶老师', role: 'teacher', code: 'teacher', classId: 'c1', classIds: ['c1'], dnd: false },
+    { id: 't1', name: '叶老师', role: 'homeroom', code: 'homeroom', classId: 'c1', classIds: ['c1'], dnd: false },
+    { id: 't2', name: '王老师', role: 'subject', code: 'subject', classId: 'c1', classIds: ['c1'], dnd: false },
     { id: 's1', name: '林小舟', role: 'student', code: 'student', classId: 'c1', dnd: false, seat: { row: 1, col: 2 } },
     { id: 's2', name: '陈安安', role: 'student', code: 'student', classId: 'c1', dnd: false, seat: { row: 1, col: 3 } },
     { id: 's3', name: '周牧野', role: 'student', code: 'student', classId: 'c1', dnd: true, seat: { row: 1, col: 4 } },
     { id: 's4', name: '苏晚晚', role: 'student', code: 'student', classId: 'c1', dnd: false, seat: { row: 1, col: 5 } },
-    { id: 'p1', name: '林妈妈', role: 'parent', code: 'parent', studentId: 's1', classId: 'c1', dnd: false },
   ]
 
   return {

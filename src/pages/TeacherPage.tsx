@@ -10,7 +10,7 @@ export function TeacherPage({ state, classId }: { state: AppState; classId?: str
   const cname = state.classes.find((c) => c.id === cid)?.name ?? '初二（3）班'
   return (
     <div className="card">
-      <h2>老师抽查 · {cname}队列</h2>
+      <h2>抽查 · {cname}队列</h2>
       <p className="muted">仅本班，{q.length} 条（每班 5–8）。不见全校混排、不见补给名单、不评皮肤。</p>
       {cid && (
         <label className="class-hour-toggle">

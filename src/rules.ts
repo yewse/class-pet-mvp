@@ -160,11 +160,6 @@ export function userById(state: AppState, id: string): User | undefined {
   return state.users.find((u) => u.id === id)
 }
 
-export function parentChild(state: AppState, parent: User): User | undefined {
-  if (!parent.studentId) return undefined
-  return state.users.find((u) => u.id === parent.studentId)
-}
-
 export function classIdOf(user: User | undefined): string | undefined {
   return user?.classId
 }
