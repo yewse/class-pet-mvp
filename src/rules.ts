@@ -292,6 +292,21 @@ export function weekIdOf(state: AppState): string {
   return weekIdFromDate(todayStr(state))
 }
 
+/** ISO 周内截至今天的工作日（周一至周五） */
+export function weekSchoolDaysSoFar(state: AppState): string[] {
+  const today = todayStr(state)
+  const d = new Date(today + 'T12:00:00Z')
+  const dayNum = d.getUTCDay() || 7
+  const monday = addDays(today, 1 - dayNum)
+  const days: string[] = []
+  for (let i = 0; i < 5; i++) {
+    const day = addDays(monday, i)
+    if (day > today) break
+    days.push(day)
+  }
+  return days.length ? days : [today]
+}
+
 export function squadTier(points: number): 'gold' | 'silver' | 'bronze' | null {
   if (points >= 10) return 'gold'
   if (points >= 6) return 'silver'

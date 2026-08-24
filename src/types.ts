@@ -200,6 +200,7 @@ export interface AppState {
   classSession: ClassSession
   krTicks: KrTick[]
   dailyMoods: DailyMood[]
+  baseHabits: BaseHabit[]
 }
 
 export type MoodId = 'sun' | 'overcast' | 'rain'
@@ -238,7 +239,19 @@ export interface ClassOkr {
   weekId: string
   objective: string
   doneCount: number
+  perkText?: string
+  perkGranted?: boolean
 }
+
+export interface BaseHabit {
+  studentId: string
+  weekId: string
+  date: string
+  status: 'done' | 'excluded'
+}
+
+export const DEFAULT_CLASS_PERK = '周五少一项作业'
+export const REFLECT_CHIP = 'hw_reflect'
 
 export interface ClassSession {
   active: boolean
@@ -325,6 +338,7 @@ export const ITEM_LABEL: Record<string, string> = {
   hw_star: '星点小冠',
   hw_hat: '学士软帽',
   hw_crown: '节庆金冠',
+  hw_reflect: '反思之眼',
   cl_scarf: '叶绿围巾',
   cl_cloud: '云朵围脖',
   cl_cape: '星点披风',

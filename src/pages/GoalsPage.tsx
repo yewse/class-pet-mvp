@@ -3,15 +3,18 @@ import { PetSvg } from '../components/PetSvg'
 import {
   classOkrOf,
   classOkrProgress,
+  classPerkOf,
   classWeekBehind,
   confirmKrTick,
   displayExpr,
+  grantClassPerk,
   pendingTicksOf,
   personalOkrOf,
   setClassObjective,
   setStudentKrTarget,
   setStudentObjective,
 } from '../store'
+import { DEFAULT_CLASS_PERK } from '../types'
 import type { AppState } from '../types'
 
 export function GoalsPage({ state }: { state: AppState }) {
@@ -22,6 +25,9 @@ export function GoalsPage({ state }: { state: AppState }) {
     Object.fromEntries(students.map((s) => [s.id, personalOkrOf(state, s.id).objective])),
   )
   const [msg, setMsg] = useState<string | null>(null)
+  const [perkDraft, setPerkDraft] = useState(classOkr.perkText || DEFAULT_CLASS_PERK)
+  const perk = classPerkOf(state)
+  const pct = classOkrProgress(state)
 
   return (
     <div>
@@ -40,8 +46,24 @@ export function GoalsPage({ state }: { state: AppState }) {
           保存班级目标
         </button>
         <p className="muted">
-          当前进度 {classOkrProgress(state)} / 100（已确认勾选的平均完成率）
+          当前进度 {pct} / 100（本周基础达标人次 ÷ 人数×工作日）。个人贡献只计确认过的努力勾选，不计考试分。
         </p>
+        {pct >= 80 && !perk && (
+          <form
+            className="row"
+            onSubmit={(e) => {
+              e.preventDefault()
+              setMsg(grantClassPerk(perkDraft) ?? '已发放本周集体奖励')
+            }}
+          >
+            <label>
+              集体奖励说明
+              <input value={perkDraft} onChange={(e) => setPerkDraft(e.target.value)} maxLength={24} />
+            </label>
+            <button type="submit" className="primary">发放本周集体奖励</button>
+          </form>
+        )}
+        {perk && <p className="ok">本周集体奖励：{perk.text}（不自动删作业）</p>}
         {classWeekBehind(state) && (
           <p className="week-rest">目标没到，全班一起复盘，不是谁的错。</p>
         )}
@@ -78,7 +100,7 @@ export function GoalsPage({ state }: { state: AppState }) {
             <tr>
               <th>姓名</th>
               <th>目标</th>
-              <th>勾选</th>
+              <th>努力勾选</th>
               <th></th>
             </tr>
           </thead>

@@ -1,7 +1,7 @@
 import { createSeed, SHOP_ITEMS } from './seed'
-import type { AppState, ClassLayout, ClassOkr, ClassSession, Expression, FacePreset, KrTick, MoodId, PersonalOkr, Pet, ReportCategory, Seat, SpeciesId } from './types'
+import type { AppState, BaseHabit, ClassLayout, ClassOkr, ClassSession, Expression, FacePreset, KrTick, MoodId, PersonalOkr, Pet, ReportCategory, Seat, SpeciesId } from './types'
 import { DEFAULT_LAYOUT, seatKey } from './types'
-import { SKIN_TO_CLOTHES, DEFAULT_KR_TARGET, SESSION_POS_CAP, SESSION_NEG_CAP, MOOD_LABEL } from './types'
+import { SKIN_TO_CLOTHES, DEFAULT_KR_TARGET, DEFAULT_CLASS_PERK, REFLECT_CHIP, SESSION_POS_CAP, SESSION_NEG_CAP, MOOD_LABEL } from './types'
 import { BASE_PETS, basePetById, basePetForSpecies, COSMETICS, cosmeticById } from './catalog'
 import {
   CATEGORY_POINTS,
@@ -27,11 +27,12 @@ import {
   todayStr,
   weekIdFromDate,
   weekIdOf,
+  weekSchoolDaysSoFar,
 } from './rules'
 import type { HonorItem, HonorTier } from './types'
 
-const KEY = 'class-pet-mvp-v10'
-const OLD_KEYS = ['class-pet-mvp-v9']
+const KEY = 'class-pet-mvp-v11'
+const OLD_KEYS = ['class-pet-mvp-v10', 'class-pet-mvp-v9']
 
 const ONLY_CLASS = 'c1'
 
@@ -103,17 +104,34 @@ export function classOkrOf(s: AppState): ClassOkr {
   if (!raw || raw.weekId !== week) {
     return { weekId: week, objective: raw?.objective || '作业准时率', doneCount: 0 }
   }
-  return { weekId: week, objective: raw.objective || '作业准时率', doneCount: Math.max(0, raw.doneCount ?? 0) }
+  return {
+    weekId: week,
+    objective: raw.objective || '作业准时率',
+    doneCount: Math.max(0, raw.doneCount ?? 0),
+    perkText: raw.perkText,
+    perkGranted: !!raw.perkGranted,
+  }
+}
+
+export function classPerkOf(s: AppState): { text: string; granted: boolean } | null {
+  const o = classOkrOf(s)
+  if (!o.perkGranted) return null
+  return { text: (o.perkText || DEFAULT_CLASS_PERK).trim(), granted: true }
+}
+
+export function todayBaseOf(s: AppState, studentId: string): BaseHabit | undefined {
+  const today = todayStr(s)
+  return (s.baseHabits ?? []).find((h) => h.studentId === studentId && h.date === today)
 }
 
 export function classOkrProgress(s: AppState): number {
   const roster = s.users.filter((u) => u.role === 'student' && u.classId === ONLY_CLASS)
   if (!roster.length) return 0
-  const sum = roster.reduce((n, u) => {
-    const o = personalOkrOf(s, u.id)
-    return n + o.krDone / Math.max(1, o.krTarget)
-  }, 0)
-  return Math.min(100, Math.round((sum / roster.length) * 100))
+  const week = weekIdOf(s)
+  const days = weekSchoolDaysSoFar(s)
+  const done = (s.baseHabits ?? []).filter((h) => h.weekId === week && h.status === 'done' && days.includes(h.date)).length
+  const denom = roster.length * Math.max(1, days.length)
+  return Math.min(100, Math.round((done / denom) * 100))
 }
 
 export function pendingTicksOf(s: AppState, studentId?: string): KrTick[] {
@@ -175,6 +193,7 @@ function syncOkrs(s: AppState): AppState {
     classSession,
     krTicks: s.krTicks ?? [],
     dailyMoods: s.dailyMoods ?? [],
+    baseHabits: s.baseHabits ?? [],
   }
 }
 
@@ -231,6 +250,7 @@ function migrate(s: AppState): AppState {
     classSession: s.classSession ?? seed.classSession,
     krTicks: s.krTicks ?? seed.krTicks ?? [],
     dailyMoods: s.dailyMoods ?? seed.dailyMoods ?? [],
+    baseHabits: s.baseHabits ?? seed.baseHabits ?? [],
   })
 }
 
@@ -873,7 +893,7 @@ export function toggleClassHour(classId: string) {
 export function buyItem(studentId: string, itemId: string) {
   const item = SHOP_ITEMS.find((i) => i.id === itemId)
   if (!item) return '商品不存在'
-  if (item.rare || item.kind === 'mount' || itemId === MOUNT_ID) {
+  if (item.rare || item.kind === 'mount' || itemId === MOUNT_ID || itemId === REFLECT_CHIP) {
     return '稀有外观与坐骑仅能由成就/周赛解锁，不可购买'
   }
   const have = state.unlocked[studentId] || []
@@ -904,11 +924,15 @@ export function equip(studentId: string, itemId: string) {
   const have = state.unlocked[studentId] || []
   if (!have.includes(itemId)) return '未解锁'
   const item = SHOP_ITEMS.find((i) => i.id === itemId)
+  const cos = cosmeticById(itemId)
   set({
     ...state,
     pets: state.pets.map((p) => {
       if (p.ownerId !== studentId) return p
       if (item?.kind === 'mount' || itemId === MOUNT_ID) return { ...p, mountId: itemId }
+      if (cos?.slot === 'headwear') return { ...p, headwearId: itemId }
+      if (cos?.slot === 'clothes') return { ...p, clothesId: itemId }
+      if (cos?.slot === 'shoes') return { ...p, shoesId: itemId }
       return { ...p, skinId: itemId }
     }),
   })
@@ -962,6 +986,15 @@ export function submitKrTick(studentId: string, note: string): string | null {
   return null
 }
 
+function maybeUnlockReflect(s: AppState, studentId: string): AppState {
+  const obj = personalOkrOf(s, studentId).objective
+  if (!obj.includes('订正')) return s
+  const have = new Set(s.unlocked[studentId] ?? [])
+  if (have.has(REFLECT_CHIP)) return s
+  have.add(REFLECT_CHIP)
+  return { ...s, unlocked: { ...s.unlocked, [studentId]: [...have] } }
+}
+
 function creditConfirmedTick(s: AppState, studentId: string): AppState {
   const today = todayStr(s)
   const cur = personalOkrOf(s, studentId)
@@ -980,7 +1013,7 @@ function creditConfirmedTick(s: AppState, studentId: string): AppState {
       expression: 'cheer' as Expression,
     }
   })
-  return { ...s, personalOkrs, pets }
+  return maybeUnlockReflect({ ...s, personalOkrs, pets }, studentId)
 }
 
 export function confirmKrTick(tickId: string, confirmerId: string): string | null {
@@ -1001,6 +1034,95 @@ export function confirmKrTick(tickId: string, confirmerId: string): string | nul
   }
   s = creditConfirmedTick(s, tick.studentId)
   set(s)
+  return null
+}
+
+
+export function markClassBaseDone(): string | null {
+  const week = weekIdOf(state)
+  const today = todayStr(state)
+  const roster = state.users.filter((u) => u.role === 'student' && u.classId === ONLY_CLASS)
+  let habits = [...(state.baseHabits ?? [])]
+  let added = 0
+  for (const u of roster) {
+    const cur = habits.find((h) => h.studentId === u.id && h.date === today)
+    if (cur?.status === 'excluded') continue
+    if (cur?.status === 'done') continue
+    habits.push({ studentId: u.id, weekId: week, date: today, status: 'done' })
+    added += 1
+  }
+  const classOkr = classOkrOf(state)
+  set({
+    ...state,
+    baseHabits: habits,
+    classOkr: { ...classOkr, doneCount: classOkr.doneCount + added },
+    classSession: state.classSession?.active
+      ? { ...state.classSession, classKrMoved: state.classSession.classKrMoved || added > 0 }
+      : state.classSession,
+  })
+  return added ? `已记 ${added} 人今日基础达标` : '今日基础已记过，或全员为例外'
+}
+
+export function excludeStudentBase(studentId: string): string | null {
+  const u = state.users.find((x) => x.id === studentId)
+  if (!u || u.role !== 'student') return '只能标记学生'
+  const today = todayStr(state)
+  const week = weekIdOf(state)
+  const habits = [...(state.baseHabits ?? [])]
+  const idx = habits.findIndex((h) => h.studentId === studentId && h.date === today)
+  let undo = false
+  if (idx >= 0) {
+    undo = habits[idx].status === 'done'
+    habits[idx] = { ...habits[idx], status: 'excluded' }
+  } else {
+    habits.push({ studentId, weekId: week, date: today, status: 'excluded' })
+  }
+  const classOkr = classOkrOf(state)
+  set({
+    ...state,
+    baseHabits: habits,
+    classOkr: undo ? { ...classOkr, doneCount: Math.max(0, classOkr.doneCount - 1) } : classOkr,
+  })
+  return null
+}
+
+export function confirmBreakthrough(studentId: string, note: string): string | null {
+  const u = state.users.find((x) => x.id === studentId)
+  if (!u || u.role !== 'student') return '只能给学生记特别突破'
+  const pending = pendingTicksOf(state, studentId)
+  if (pending.length) return confirmKrTick(pending[0].id, 't1')
+  const n = note.trim()
+  if (!n) return '特别突破需要已有证据，或写一句备注'
+  if (n.length > 24) return '备注请控制在 24 字内'
+  if (!/[一-鿿]/.test(n)) return '请用中文写备注'
+  const cur = personalOkrOf(state, studentId)
+  if (cur.krDone >= cur.krTarget) return '个人关键结果已满'
+  const week = weekIdOf(state)
+  const tick: KrTick = {
+    id: uid('kt'),
+    studentId,
+    weekId: week,
+    date: todayStr(state),
+    note: n,
+    status: 'confirmed',
+    confirmerId: 't1',
+  }
+  let s: AppState = { ...state, krTicks: [...(state.krTicks ?? []), tick] }
+  s = creditConfirmedTick(s, studentId)
+  set(s)
+  return null
+}
+
+export function grantClassPerk(text: string): string | null {
+  const pct = classOkrProgress(state)
+  if (pct < 80) return '班级周关键结果未到 80%，还不能发集体奖励'
+  const o = classOkrOf(state)
+  if (o.perkGranted) return '本周集体奖励已发放'
+  const n = (text || DEFAULT_CLASS_PERK).trim()
+  if (!n) return '请写一项中文优惠'
+  if (n.length > 24) return '优惠请控制在 24 字内'
+  if (!/[一-鿿]/.test(n)) return '请用中文写优惠'
+  set({ ...state, classOkr: { ...o, perkText: n, perkGranted: true } })
   return null
 }
 

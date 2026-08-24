@@ -207,6 +207,15 @@ function Headwear({ id }: { id?: string }) {
       </g>
     )
   }
+  if (id === 'hw_reflect') {
+    return (
+      <g className="layer-headwear">
+        <ellipse cx="100" cy="42" rx="16" ry="10" fill="#2a3348" stroke="#c8e4ff" strokeWidth="2" />
+        <ellipse cx="100" cy="42" rx="7" ry="6" fill="#7ad0ff" opacity="0.85" />
+        <circle cx="103" cy="39" r="2" fill="#fff" />
+      </g>
+    )
+  }
   return null
 }
 

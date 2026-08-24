@@ -73,6 +73,7 @@ export const COSMETICS: Cosmetic[] = [
   { id: 'hw_star', name: '星点小冠', slot: 'headwear', cost: 4, basic: false },
   { id: 'hw_hat', name: '学士软帽', slot: 'headwear', cost: 8, basic: false },
   { id: 'hw_crown', name: '节庆金冠', slot: 'headwear', cost: 12, basic: false },
+  { id: 'hw_reflect', name: '反思之眼', slot: 'headwear', cost: 0, basic: false },
   { id: 'cl_scarf', name: '叶绿围巾', slot: 'clothes', cost: 0, basic: true },
   { id: 'cl_cloud', name: '云朵围脖', slot: 'clothes', cost: 0, basic: true },
   { id: 'cl_cape', name: '星点披风', slot: 'clothes', cost: 4, basic: false },
@@ -86,7 +87,7 @@ export const COSMETICS: Cosmetic[] = [
 ]
 
 export function cosmeticsOf(slot: CosmeticSlot): Cosmetic[] {
-  return COSMETICS.filter((c) => c.slot === slot)
+  return COSMETICS.filter((c) => c.slot === slot && c.id !== 'hw_reflect')
 }
 
 export function cosmeticById(id: string): Cosmetic | undefined {

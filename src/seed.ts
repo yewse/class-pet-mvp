@@ -294,5 +294,6 @@ export function createSeed(): AppState {
     classSession: { active: false, deltas: {}, classKrMoved: false },
     krTicks: [],
     dailyMoods: [],
+    baseHabits: [],
   }
 }

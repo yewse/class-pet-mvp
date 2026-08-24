@@ -1,23 +1,26 @@
 import { useEffect, useState } from 'react'
 import { PetSvg } from '../components/PetSvg'
 import {
-  adjustClassScore,
-  CLASS_REASONS,
   classLayoutOf,
   classMoodMix,
   classOkrOf,
   classOkrProgress,
+  classPerkOf,
+  confirmBreakthrough,
   displayExpr,
   endClassSession,
+  excludeStudentBase,
+  grantClassPerk,
   majorityRain,
+  markClassBaseDone,
   occupantAt,
   pendingTicksOf,
   personalOkrOf,
   praiseWholeClass,
-  sessionDeltaOf,
   startClassSession,
-  tapClassKr,
+  todayBaseOf,
 } from '../store'
+import { DEFAULT_CLASS_PERK } from '../types'
 import type { AppState, User } from '../types'
 
 type Fx = { id: number; studentId: string; kind: 'up' | 'down' | 'all'; n: number }
@@ -39,9 +42,10 @@ export function ClassroomBoard({ state }: { state: AppState }) {
   const layout = classLayoutOf(state)
   const roster = state.users.filter((u) => u.role === 'student' && u.classId === cid)
   const [picked, setPicked] = useState<User | null>(null)
-  const [reason, setReason] = useState<(typeof CLASS_REASONS)[number]>('推进个人目标')
   const [fx, setFx] = useState<Fx[]>([])
   const [shimmer, setShimmer] = useState(false)
+  const [breakNote, setBreakNote] = useState('')
+  const [perkDraft, setPerkDraft] = useState(DEFAULT_CLASS_PERK)
   const [showHint, setShowHint] = useState(() => {
     try {
       return localStorage.getItem(HINT_KEY) !== '1'
@@ -52,6 +56,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
 
   const classOkr = classOkrOf(state)
   const classPct = classOkrProgress(state)
+  const perk = classPerkOf(state)
   const inSession = !!state.classSession?.active
   const mix = classMoodMix(state)
   const tiredClass = majorityRain(state)
@@ -66,13 +71,37 @@ export function ClassroomBoard({ state }: { state: AppState }) {
     setFx((xs) => [...xs, { id: Date.now() + Math.random(), studentId, kind, n }])
   }
 
-  function apply(studentId: string, delta: number) {
-    const err = adjustClassScore(studentId, delta, reason)
+  function markAllBase() {
+    const err = markClassBaseDone()
+    if (err && !err.startsWith('已记')) {
+      window.alert(err)
+      return
+    }
+    setShimmer(true)
+    window.setTimeout(() => setShimmer(false), 900)
+    for (const s of roster) {
+      if (todayBaseOf(state, s.id)?.status !== 'excluded') burst(s.id, 1, 'up')
+    }
+  }
+
+  function markMiss(studentId: string) {
+    const err = excludeStudentBase(studentId)
     if (err) {
       window.alert(err)
       return
     }
-    burst(studentId, delta, delta > 0 ? 'up' : 'down')
+    burst(studentId, -1, 'down')
+    setPicked(null)
+  }
+
+  function markBreak(studentId: string) {
+    const err = confirmBreakthrough(studentId, breakNote)
+    if (err) {
+      window.alert(err)
+      return
+    }
+    burst(studentId, 1, 'up')
+    setBreakNote('')
     setPicked(null)
   }
 
@@ -115,6 +144,9 @@ export function ClassroomBoard({ state }: { state: AppState }) {
               上课
             </button>
           )}
+          <button type="button" className="primary" onClick={markAllBase}>
+            全班基础达标
+          </button>
           <button
             className="board-praise"
             type="button"
@@ -139,18 +171,35 @@ export function ClassroomBoard({ state }: { state: AppState }) {
         <div className="class-okr-title">
           本周班级目标 · {classOkr.objective}
         </div>
-        <div className="class-okr-bar" onClick={() => tapClassKr(1)}>
+        <div className="class-okr-bar">
           <div className="class-okr-fill" style={{ width: `${classPct}%` }} />
           <span>
             {classPct} / 100（{classOkr.doneCount}/{roster.length}）
           </span>
         </div>
-        <p className="muted">点进度条或记「帮助班级目标」推进；进度 = 勾选人数 ÷ 全班人数。</p>
+        <p className="muted">进度 = 本周每日基础达标人次 ÷（人数 × 工作日）。个人贡献只计确认过的努力勾选，不计考试分。</p>
+        {classPct >= 80 && !perk && (
+          <form
+            className="row perk-row"
+            onSubmit={(e) => {
+              e.preventDefault()
+              const err = grantClassPerk(perkDraft)
+              if (err) window.alert(err)
+            }}
+          >
+            <label>
+              集体奖励
+              <input value={perkDraft} onChange={(e) => setPerkDraft(e.target.value)} maxLength={24} />
+            </label>
+            <button type="submit" className="primary">发放本周集体奖励</button>
+          </form>
+        )}
+        {perk && <p className="ok">本周集体奖励：{perk.text}（不自动删作业）</p>}
       </div>
 
       {showHint && (
         <div className="board-hint">
-          <span>点座位记录目标进展，对照自己打钩，不比课堂总分</span>
+          <span>先点「全班基础达标」，再只点未完成或特别突破。不比考试分。</span>
           <button type="button" onClick={dismissHint}>
             知道了
           </button>
@@ -212,6 +261,8 @@ export function ClassroomBoard({ state }: { state: AppState }) {
               <div className="board-okr">{okr.objective || '未设目标'}</div>
               <KrDots done={okr.krDone} target={okr.krTarget} />
               {wait > 0 && <div className="pending-tag">待确认</div>}
+              {todayBaseOf(state, s.id)?.status === 'done' && <div className="ok">今日基础</div>}
+              {todayBaseOf(state, s.id)?.status === 'excluded' && <div className="err">未完成</div>}
             </button>
           )
         })}
@@ -220,10 +271,11 @@ export function ClassroomBoard({ state }: { state: AppState }) {
       {picked && (
         <div className="pad-mask" onClick={() => setPicked(null)}>
           <div className="score-pad" onClick={(e) => e.stopPropagation()}>
-            <h2>核验 · {picked.name}</h2>
+            <h2>例外 · {picked.name}</h2>
             <p className="muted">
-              {personalOkrOf(state, picked.id).objective || '未设个人目标'} · 本课核验次数{' '}
-              {sessionDeltaOf(picked.id)}（上限 6 / 3）
+              {personalOkrOf(state, picked.id).objective || '未设个人目标'} · 个人勾选{' '}
+              {personalOkrOf(state, picked.id).krDone}/{personalOkrOf(state, picked.id).krTarget}
+              （努力勾选，不是考试分）
             </p>
             {pendingTicksOf(state, picked.id).map((k) => (
               <p key={k.id} className="pending-tag">待确认 · {k.note}</p>
@@ -232,27 +284,25 @@ export function ClassroomBoard({ state }: { state: AppState }) {
               done={personalOkrOf(state, picked.id).krDone}
               target={personalOkrOf(state, picked.id).krTarget}
             />
-            <div className="row">
-              {CLASS_REASONS.map((r) => (
-                <button key={r} type="button" className={reason === r ? 'on' : ''} onClick={() => setReason(r)}>
-                  {r === '推进个人目标' ? '确认' : r === '帮助班级目标' ? '推进' : r}
-                </button>
-              ))}
-            </div>
+            <p className="muted">
+              今日基础：{todayBaseOf(state, picked.id)?.status === 'done' ? '已达标' : todayBaseOf(state, picked.id)?.status === 'excluded' ? '未完成' : '未记'}
+            </p>
+            <label>
+              特别突破备注
+              <input
+                value={breakNote}
+                onChange={(e) => setBreakNote(e.target.value)}
+                maxLength={24}
+                placeholder="有证据可留空，否则写一句"
+              />
+            </label>
             <div className="row pad-ops">
-              {reason === '走神提醒' ? (
-                <button type="button" className="pad-minus" onClick={() => apply(picked.id, -1)}>
-                  提醒
-                </button>
-              ) : reason === '推进个人目标' ? (
-                <button type="button" className="primary" onClick={() => apply(picked.id, 1)}>
-                  确认
-                </button>
-              ) : (
-                <button type="button" className="primary" onClick={() => apply(picked.id, 1)}>
-                  推进
-                </button>
-              )}
+              <button type="button" className="pad-minus" onClick={() => markMiss(picked.id)}>
+                未完成
+              </button>
+              <button type="button" className="primary" onClick={() => markBreak(picked.id)}>
+                特别突破
+              </button>
             </div>
             <button type="button" onClick={() => setPicked(null)}>
               关闭

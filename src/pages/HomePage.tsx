@@ -3,7 +3,9 @@ import { AdoptCeremony } from '../components/AdoptCeremony'
 import { PetSvg } from '../components/PetSvg'
 import {
   balance,
+  classPerkOf,
   confirmKrTick,
+  equip,
   feedPet,
   moodOf,
   pendingTicksOf,
@@ -15,7 +17,7 @@ import {
   submitKrTick,
   tapPet,
 } from '../store'
-import { DAILY_EARN_CAP, DAILY_SPEND_CAP, ITEM_LABEL, MOOD_LABEL, displayLedgerReason } from '../types'
+import { DAILY_EARN_CAP, DAILY_SPEND_CAP, ITEM_LABEL, MOOD_LABEL, REFLECT_CHIP, displayLedgerReason } from '../types'
 import type { MoodId } from '../types'
 import { ACHIEVEMENTS, dayEarn, daySpendAbs, isClassHourLocked, todayStr } from '../rules'
 import { showToast } from '../toast'
@@ -119,8 +121,11 @@ export function HomePage({
             ))}
           </div>
         )}
+        {classPerkOf(state) && (
+          <p className="ok">本周集体奖励：{classPerkOf(state)!.text}（老师发放，不自动删作业）</p>
+        )}
         <p>
-          本周目标 {okr.objective || '未设'} · 进度 {okr.krDone}/{okr.krTarget}
+          本周目标 {okr.objective || '未设'} · 努力勾选 {okr.krDone}/{okr.krTarget}
           {minePending.length ? ` · 待确认 ${minePending.length}` : ''}（只和自己比）
         </p>
         <div className="kr-dots" aria-label={`个人进度 ${okr.krDone}/${okr.krTarget}`}>
@@ -165,6 +170,16 @@ export function HomePage({
         {minePending.map((k) => (
           <p key={k.id} className="pending-tag">待确认 · {k.note}</p>
         ))}
+        {(state.unlocked[studentId] || []).includes(REFLECT_CHIP) && (
+          <div className="item">
+            已解锁头饰 反思之眼（订正目标确认勾选，不可购买）
+            {!readonly && pet.headwearId !== REFLECT_CHIP && (
+              <button type="button" className="primary" onClick={() => showToast(equip(studentId, REFLECT_CHIP) ?? '已戴上反思之眼')}>
+                戴上
+              </button>
+            )}
+          </div>
+        )}
         {!readonly && peerPending.length > 0 && (
           <div>
             <h3>同学待确认</h3>
