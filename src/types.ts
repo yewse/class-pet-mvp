@@ -184,7 +184,7 @@ export interface AchievementDef {
 export interface ShopItem {
   id: string
   name: string
-  cost: 4 | 8 | 12
+  cost: 4 | 6 | 8 | 12
   kind: 'skin' | 'mount'
   rare: boolean
 }
@@ -267,7 +267,7 @@ export interface BaseHabit {
   studentId: string
   weekId: string
   date: string
-  status: 'done' | 'excluded'
+  status: 'done' | 'excluded' | 'absent'
 }
 
 export const DEFAULT_CLASS_PERK = '周五少一项作业'

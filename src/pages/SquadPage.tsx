@@ -24,6 +24,8 @@ export function SquadPage({ state, meId, isTeacher }: { state: AppState; meId: s
   )
   const myTeam = squads.find((s) => s.memberIds.includes(meId))
   const [label, setLabel] = useState('进步之星')
+  const students = state.users.filter((u) => u.role === 'student' && u.classId === viewClassId)
+  const [honorSid, setHonorSid] = useState(students[0]?.id ?? '')
 
   return (
     <div className="grid2">
@@ -77,12 +79,23 @@ export function SquadPage({ state, meId, isTeacher }: { state: AppState; meId: s
         </ol>
         {isTeacher && (
           <>
-            <input value={label} onChange={(e) => setLabel(e.target.value)} />
+            <label>
+              选择学生
+              <select value={honorSid} onChange={(e) => setHonorSid(e.target.value)} aria-label="上墙学生">
+                <option value="">请选择</option>
+                {students.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </label>
+            <input value={label} onChange={(e) => setLabel(e.target.value)} aria-label="荣誉称号" />
             <button
               onClick={() => {
-                const sid =
-                  state.users.find((u) => u.role === 'student' && (!viewClassId || u.classId === viewClassId))?.id ?? 's2'
-                const e = settleHonor(sid, label)
+                if (!honorSid) {
+                  showToast('请先选择学生', 'err')
+                  return
+                }
+                const e = settleHonor(honorSid, label)
                 showToast(e ?? '已上墙', e ? 'err' : 'ok')
               }}
             >

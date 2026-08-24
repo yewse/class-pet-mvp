@@ -30,10 +30,11 @@ import {
   todayStr,
   weekIdFromDate,
   weekIdOf,
-  weekSchoolDaysSoFar,
+  weekSchoolDaysFor,
   withPetLife,
 } from './rules'
 import type { HonorItem, HonorTier } from './types'
+import { showToast } from './toast'
 
 const KEY = 'class-pet-mvp-v13'
 const OLD_KEYS = ['class-pet-mvp-v12', 'class-pet-mvp-v11', 'class-pet-mvp-v10', 'class-pet-mvp-v9']
@@ -158,20 +159,27 @@ export function todayBaseOf(s: AppState, studentId: string): BaseHabit | undefin
   return (s.baseHabits ?? []).find((h) => h.studentId === studentId && h.date === today)
 }
 
-export function classOkrProgress(s: AppState): number {
+export function classOkrProgress(s: AppState, aroundIso?: string): number {
   const roster = s.users.filter((u) => u.role === 'student' && u.classId === ONLY_CLASS)
   if (!roster.length) return 0
-  const week = weekIdOf(s)
-  const days = weekSchoolDaysSoFar(s)
-  const done = (s.baseHabits ?? []).filter((h) => h.weekId === week && h.status === 'done' && days.includes(h.date)).length
-  const denom = roster.length * Math.max(1, days.length)
+  const around = aroundIso ?? todayStr(s)
+  const week = weekIdFromDate(around)
+  const days = weekSchoolDaysFor(around)
+  const ids = new Set(roster.map((u) => u.id))
+  const rows = (s.baseHabits ?? []).filter((h) => h.weekId === week && ids.has(h.studentId) && days.includes(h.date))
+  const done = rows.filter((h) => h.status === 'done').length
+  const skip = rows.filter((h) => h.status === 'excluded' || h.status === 'absent').length
+  const denom = Math.max(1, roster.length * 5 - skip)
   return Math.min(100, Math.round((done / denom) * 100))
 }
 
+export function lastWeekClassOkrProgress(s: AppState): number {
+  return classOkrProgress(s, addDays(todayStr(s), -7))
+}
+
 export function pendingTicksOf(s: AppState, studentId?: string): KrTick[] {
-  const week = weekIdOf(s)
   return (s.krTicks ?? []).filter(
-    (k) => k.weekId === week && k.status === 'pending' && (!studentId || k.studentId === studentId),
+    (k) => k.status === 'pending' && (!studentId || k.studentId === studentId),
   )
 }
 
@@ -199,10 +207,49 @@ export function classWeekBehind(s: AppState): boolean {
   return classOkrProgress(s) < 50
 }
 
-export function displayExpr(s: AppState, pet: Pet, weekView = false): Expression {
-  if (weekView && classWeekBehind(s)) return 'dormant'
-  if (majorityRain(s)) return 'tired'
+export function displayExpr(_s: AppState, pet: Pet, _weekView = false): Expression {
   return pet.expression
+}
+
+export function todayRainNames(s: AppState): string[] {
+  const today = todayStr(s)
+  const names: string[] = []
+  for (const u of s.users.filter((x) => x.role === 'student' && x.classId === ONLY_CLASS)) {
+    const m = (s.dailyMoods ?? []).find((x) => x.studentId === u.id && x.date === today)
+    if (m?.mood === 'rain') names.push(u.name)
+  }
+  return names
+}
+
+export function rainStreakNames(s: AppState, minDays = 2): string[] {
+  const today = todayStr(s)
+  const out: string[] = []
+  for (const u of s.users.filter((x) => x.role === 'student' && x.classId === ONLY_CLASS)) {
+    let n = 0
+    let d = today
+    while ((s.dailyMoods ?? []).some((m) => m.studentId === u.id && m.date === d && m.mood === 'rain')) {
+      n += 1
+      d = addDays(d, -1)
+    }
+    if (n >= minDays) out.push(`${u.name}（${n}日）`)
+  }
+  return out
+}
+
+export function todayMissNames(s: AppState): string[] {
+  const today = todayStr(s)
+  const names: string[] = []
+  for (const u of s.users.filter((x) => x.role === 'student' && x.classId === ONLY_CLASS)) {
+    const h = (s.baseHabits ?? []).find((x) => x.studentId === u.id && x.date === today)
+    if (h?.status === 'excluded') names.push(u.name)
+  }
+  return names
+}
+
+function carryPendingTicks(ticks: KrTick[], week: string): KrTick[] {
+  return (ticks ?? []).map((k) =>
+    k.status === 'pending' && k.weekId !== week ? { ...k, weekId: week } : k,
+  )
 }
 
 function syncOkrs(s: AppState): AppState {
@@ -225,7 +272,7 @@ function syncOkrs(s: AppState): AppState {
     personalOkrs,
     classOkr,
     classSession,
-    krTicks: s.krTicks ?? [],
+    krTicks: carryPendingTicks(s.krTicks ?? [], week),
     dailyMoods: s.dailyMoods ?? [],
     baseHabits: s.baseHabits ?? [],
   }
@@ -1019,12 +1066,18 @@ export function advanceWeek() {
   const today = todayStr(state)
   const nextDay = addDays(today, 7)
   const prev = currentWeek()
+  const pendingBefore = pendingTicksOf(state).length
   let next: AppState = { ...state, todayOverride: nextDay }
   next = maybeAutoSettle(next)
   if (!alreadySettled(next, prev) && prev < weekIdOf(next)) {
     next = applyHonorForWeek(next, prev)
   }
+  next = syncOkrs(next)
   set(applyAchievements(next))
+  const pendingAfter = pendingTicksOf(getState()).length
+  if (pendingBefore > 0 && pendingAfter > 0) {
+    showToast(`待确认勾选已带到本周（${pendingAfter} 条）`, 'info')
+  }
   return `已进入 ${weekIdOf(getState())}，并自动结算 ${prev}`
 }
 
@@ -1100,11 +1153,7 @@ export function setDailyMood(studentId: string, mood: MoodId): string | null {
   const today = todayStr(state)
   const dailyMoods = (state.dailyMoods ?? []).filter((m) => !(m.studentId === studentId && m.date === today))
   dailyMoods.push({ studentId, date: today, mood })
-  let pets = state.pets
-  if (majorityRain({ ...state, dailyMoods })) {
-    pets = pets.map((p) => ({ ...p, expression: 'tired' as Expression }))
-  }
-  set({ ...state, dailyMoods, pets })
+  set({ ...state, dailyMoods })
   return null
 }
 
@@ -1187,6 +1236,7 @@ export function confirmKrTick(tickId: string, confirmerId: string): string | nul
 export function markClassBaseDone(): string | null {
   const denied = requireHomeroom()
   if (denied) return denied
+  snapSeat()
   const week = weekIdOf(state)
   const today = todayStr(state)
   const roster = state.users.filter((u) => u.role === 'student' && u.classId === ONLY_CLASS)
@@ -1194,7 +1244,7 @@ export function markClassBaseDone(): string | null {
   let added = 0
   for (const u of roster) {
     const cur = habits.find((h) => h.studentId === u.id && h.date === today)
-    if (cur?.status === 'excluded') continue
+    if (cur?.status === 'excluded' || cur?.status === 'absent') continue
     if (cur?.status === 'done') continue
     habits.push({ studentId: u.id, weekId: week, date: today, status: 'done' })
     added += 1
@@ -1312,7 +1362,8 @@ export function grantClassPerk(text: string): string | null {
   const denied = requireHomeroom()
   if (denied) return denied
   const pct = classOkrProgress(state)
-  if (pct < 80) return '班级周关键结果未到 80%，还不能发集体奖励'
+  const prevPct = lastWeekClassOkrProgress(state)
+  if (pct < 80 && pct <= prevPct) return '班级周关键结果未到 80%，且未高于上周，还不能发集体奖励'
   const o = classOkrOf(state)
   if (o.perkGranted) return '本周集体奖励已发放'
   const n = (text || DEFAULT_CLASS_PERK).trim()

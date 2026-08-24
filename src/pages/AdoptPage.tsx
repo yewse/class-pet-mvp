@@ -164,7 +164,7 @@ export function AdoptPage({
                   >
                     {c.name}
                     {c.cost ? ` · ${c.cost}` : ' · 免费'}
-                    {locked ? ` · 再攒 ${need} 分解锁` : ''}
+                    {locked ? (c.cost > 6 ? ' · 本周活动解锁' : ` · 还差 ${need} 分`) : ''}
                   </button>
                 )
               })}

@@ -295,18 +295,36 @@ export function weekIdOf(state: AppState): string {
   return weekIdFromDate(todayStr(state))
 }
 
+/** 演示用节假日占位，不计入上学日 */
+export const SCHOOL_HOLIDAY_STUB: string[] = []
+
+export function isSchoolDay(iso: string): boolean {
+  const d = new Date(iso + 'T12:00:00')
+  const w = d.getDay()
+  if (w === 0 || w === 6) return false
+  return !SCHOOL_HOLIDAY_STUB.includes(iso)
+}
+
+function isoWeekMonday(iso: string): string {
+  const d = new Date(iso + 'T12:00:00Z')
+  const dayNum = d.getUTCDay() || 7
+  return addDays(iso, 1 - dayNum)
+}
+
+/** 本 ISO 周一至周五，固定 5 天（不按已过天数收缩） */
+export function weekSchoolDaysFor(iso: string): string[] {
+  const monday = isoWeekMonday(iso)
+  return Array.from({ length: 5 }, (_, i) => addDays(monday, i))
+}
+
+export function weekSchoolDaysAll(state: AppState): string[] {
+  return weekSchoolDaysFor(todayStr(state))
+}
+
 /** ISO 周内截至今天的工作日（周一至周五） */
 export function weekSchoolDaysSoFar(state: AppState): string[] {
   const today = todayStr(state)
-  const d = new Date(today + 'T12:00:00Z')
-  const dayNum = d.getUTCDay() || 7
-  const monday = addDays(today, 1 - dayNum)
-  const days: string[] = []
-  for (let i = 0; i < 5; i++) {
-    const day = addDays(monday, i)
-    if (day > today) break
-    days.push(day)
-  }
+  const days = weekSchoolDaysAll(state).filter((day) => day <= today && isSchoolDay(day))
   return days.length ? days : [today]
 }
 
@@ -361,8 +379,20 @@ export function nowMs(state: AppState): number {
 export function hoursSinceCare(pet: Pet, state: AppState): number {
   const stamp = pet.lastCareAt || (pet.lastCareDate ? `${pet.lastCareDate}T12:00:00` : null)
   if (!stamp) return 18
-  const h = (nowMs(state) - new Date(stamp).getTime()) / 3600000
-  return Math.max(0, h)
+  const start = new Date(stamp).getTime()
+  const end = nowMs(state)
+  if (end <= start) return 0
+  let hours = 0
+  let t0 = start
+  while (t0 < end) {
+    const iso = new Date(t0).toISOString().slice(0, 10)
+    const next = new Date(iso + 'T00:00:00')
+    next.setDate(next.getDate() + 1)
+    const sliceEnd = Math.min(end, next.getTime())
+    if (isSchoolDay(iso)) hours += (sliceEnd - t0) / 3600000
+    t0 = sliceEnd
+  }
+  return Math.max(0, hours)
 }
 
 /** 饱食这里表示「想念值」：越久没照料越高；照料会清零。 */

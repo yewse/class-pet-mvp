@@ -8,7 +8,7 @@ export function ShopPage({ state, studentId }: { state: AppState; studentId: str
 
   function tryBuy(id: string, cost: number) {
     if (pts < cost) {
-      showToast(`积分不足，还差 ${cost - pts} 分`)
+      showToast('积分不足，明天再来')
       return
     }
     const e = buyItem(studentId, id)
@@ -36,9 +36,9 @@ export function ShopPage({ state, studentId }: { state: AppState; studentId: str
                   装备
                 </button>
               ) : lockedRare ? (
-                <span className="meta-copy">
-                  {pts < it.cost ? `再攒 ${it.cost - pts} 分解锁` : '成就/周赛解锁'}
-                </span>
+                <span className="meta-copy">{it.rare ? '成就解锁' : '本周活动解锁'}</span>
+              ) : it.cost > 6 ? (
+                <span className="meta-copy">本周活动解锁</span>
               ) : (
                 <button type="button" disabled={unaffordable} className={unaffordable ? 'unaffordable-btn' : ''} onClick={() => tryBuy(it.id, it.cost)}>
                   兑换

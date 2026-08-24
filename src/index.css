@@ -541,6 +541,16 @@ select {
 .expr-dormant .pet-react, .expr-dormant .pet-head { animation: none; }
 .mood-mix { display: flex; gap: 14px; align-items: center; color: #ffe7b0; margin-bottom: 8px; font-size: 18px; }
 .mood-banner { background: #3a3048; color: #ffe7b0; padding: 8px 12px; border-radius: 10px; margin: 0 0 10px; }
+.teacher-private {
+  background: #2c2833;
+  color: #f3e6c4;
+  border: 1px dashed #8a7a5a;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+.teacher-private .muted { color: #c9b892; }
 .pending-tag { color: #ffd56a; font-size: 16px; margin: 4px 0; font-weight: 700; }
 .kr-dots span.pending { background: #f4d48a; box-shadow: 0 0 0 2px #c98a18; }
 .week-rest { background: #fff4cc; padding: 10px 12px; border-radius: 10px; }

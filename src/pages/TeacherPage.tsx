@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { lastTeacherAudit, teacherAudit, toggleClassHour, undoTeacherAudit } from '../store'
+import { lastTeacherAudit, rainStreakNames, teacherAudit, todayRainNames, toggleClassHour, undoTeacherAudit } from '../store'
 import type { AppState, Report } from '../types'
 import { CATEGORY_LABEL, STATUS_LABEL, displayLedgerReason } from '../types'
 import { auditQueue } from '../rules'
@@ -68,6 +68,13 @@ export function TeacherPage({ state, classId }: { state: AppState; classId?: str
     <div className="card">
       <h2>抽查 · {cname}队列</h2>
       <p className="meta-copy">仅本班，{q.length} 条待处理（每班 5–8）。不见全校混排、不见补给名单、不评皮肤。</p>
+      <p className="muted">关怀：连续雨（仅老师可见）
+        {rainStreakNames(state).length
+          ? ' ' + rainStreakNames(state).join('、')
+          : todayRainNames(state).length
+            ? ' 今日雨 ' + todayRainNames(state).join('、')
+            : ' 今日暂无'}
+      </p>
       {cid && (
         <label className="class-hour-toggle">
           <input type="checkbox" checked={locked} onChange={() => toggleClassHour(cid)} />

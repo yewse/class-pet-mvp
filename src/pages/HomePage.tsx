@@ -245,13 +245,13 @@ export function HomePage({
         {!readonly && (
           <div className="row">
             <button type="button" className={locked ? 'care-later' : ''} onClick={() => care(() => tapPet(studentId), '轻点')}>
-              {locked ? '轻点 · 课后可用' : '轻点 0'}
+              {locked ? '轻点 · 课后可用' : '轻点 免费'}
             </button>
             <button type="button" className={locked ? 'care-later' : ''} onClick={() => care(() => petPet(studentId), '抚摸')}>
-              {locked ? '抚摸 · 课后可用' : '抚摸 0'}
+              {locked ? '抚摸 · 课后可用' : '抚摸 免费'}
             </button>
             <button type="button" className={locked ? 'care-later' : ''} onClick={() => care(() => feedPet(studentId), '喂食')}>
-              {locked ? '喂食 · 课后可用' : '喂食 0'}
+              {locked ? '喂食 · 课后可用' : '喂食 免费'}
             </button>
             <button type="button" className="secondary" onClick={() => setReplay(true)}>
               再看领养

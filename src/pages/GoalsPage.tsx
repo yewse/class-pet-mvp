@@ -8,8 +8,11 @@ import {
   confirmKrTick,
   displayExpr,
   grantClassPerk,
+  lastWeekClassOkrProgress,
   pendingTicksOf,
   personalOkrOf,
+  rainStreakNames,
+  todayRainNames,
   setClassObjective,
   setStudentKrTarget,
   setStudentObjective,
@@ -28,6 +31,7 @@ export function GoalsPage({ state }: { state: AppState }) {
   const [perkDraft, setPerkDraft] = useState(classOkr.perkText || DEFAULT_CLASS_PERK)
   const perk = classPerkOf(state)
   const pct = classOkrProgress(state)
+  const canPerk = pct >= 80 || pct > lastWeekClassOkrProgress(state)
 
   return (
     <div>
@@ -46,9 +50,9 @@ export function GoalsPage({ state }: { state: AppState }) {
           保存班级目标
         </button>
         <p className="goal-formula">
-          当前进度 {Math.min(100, pct)} / 100。本周每天基础达标的人次，除以应到达人次。
+          当前进度 {Math.min(100, pct)} / 100。分母为本周 5 个上学日 × 人数（未完成 / 缺勤不计入）。
         </p>
-        {pct >= 80 && !perk && (
+        {canPerk && !perk && (
           <form
             className="row"
             onSubmit={(e) => {
@@ -67,6 +71,13 @@ export function GoalsPage({ state }: { state: AppState }) {
         {classWeekBehind(state) && (
           <p className="week-rest">目标没到，全班一起复盘，不是谁的错。</p>
         )}
+        <p className="muted">关怀：连续雨（仅老师可见）
+          {rainStreakNames(state).length
+            ? ' ' + rainStreakNames(state).join('、')
+            : todayRainNames(state).length
+              ? ' 今日雨 ' + todayRainNames(state).join('、')
+              : ' 今日暂无'}
+        </p>
         {msg && <p className={msg.startsWith('已') ? 'ok' : 'err'}>{msg}</p>}
         <div className="week-pets">
           {students.map((s) => {
