@@ -19,8 +19,9 @@ export function AdoptCeremony(props: {
   shoesId?: string
   mountId?: string | null
   onDone: () => void
+  allowSkipNow?: boolean
 }) {
-  const [canSkip, setCanSkip] = useState(false)
+  const [canSkip, setCanSkip] = useState(!!props.allowSkipNow)
   const doneRef = useRef(false)
   const onDoneRef = useRef(props.onDone)
   onDoneRef.current = props.onDone

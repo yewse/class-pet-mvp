@@ -45,8 +45,8 @@ export function GoalsPage({ state }: { state: AppState }) {
         >
           保存班级目标
         </button>
-        <p className="muted">
-          当前进度 {pct} / 100（本周基础达标人次 ÷ 人数×工作日）。个人贡献只计确认过的努力勾选，不计考试分。
+        <p className="goal-formula">
+          当前进度 {Math.min(100, pct)} / 100。本周每天基础达标的人次，除以应到达人次。
         </p>
         {pct >= 80 && !perk && (
           <form

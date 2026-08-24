@@ -101,7 +101,7 @@ export default function App() {
 
   const tabs: { id: Tab; label: string; show: boolean }[] = [
     { id: 'home', label: '宠物主页', show: session.role === 'student' },
-    { id: 'adopt', label: '领养', show: session.role === 'student' },
+    { id: 'adopt', label: '领养', show: session.role === 'student' && needAdopt },
     { id: 'report', label: '申报', show: session.role === 'student' },
     { id: 'visit', label: '宠物互访', show: session.role === 'student' },
     { id: 'squad', label: '小队周赛', show: session.role === 'student' || homeroom },

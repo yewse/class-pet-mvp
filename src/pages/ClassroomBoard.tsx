@@ -19,6 +19,8 @@ import {
   praiseWholeClass,
   startClassSession,
   todayBaseOf,
+  undoLastSeatAction,
+  lastSeatAction,
 } from '../store'
 import { auditQueue } from '../rules'
 import { showToast } from '../toast'
@@ -74,6 +76,15 @@ export function ClassroomBoard({ state }: { state: AppState }) {
     const t = window.setTimeout(() => setFx((xs) => xs.slice(1)), 900)
     return () => window.clearTimeout(t)
   }, [fx])
+
+  useEffect(() => {
+    if (!picked) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPicked(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [picked])
 
   function burst(studentId: string, n: number, kind: Fx['kind']) {
     setFx((xs) => [...xs, { id: Date.now() + Math.random(), studentId, kind, n }])
@@ -192,10 +203,10 @@ export function ClassroomBoard({ state }: { state: AppState }) {
         <div className="class-okr-bar">
           <div className="class-okr-fill" style={{ width: `${classPct}%` }} />
           <span>
-            {classPct} / 100（{classOkr.doneCount}/{roster.length}）
+            {Math.min(100, classPct)} / 100
           </span>
         </div>
-        <p className="muted">进度 = 本周每日基础达标人次 ÷（人数 × 工作日）。个人贡献只计确认过的努力勾选，不计考试分。</p>
+        <p className="goal-formula">本周每天基础达标的人次，除以应到达人次。</p>
         {homeroom && classPct >= 80 && !perk && (
           <form
             className="row perk-row"
@@ -284,24 +295,46 @@ export function ClassroomBoard({ state }: { state: AppState }) {
 
       {picked && staff && (
         <div className="pad-mask" onClick={() => setPicked(null)}>
-          <div className="score-pad pad-slim" onClick={(e) => e.stopPropagation()}>
+          <div className="score-pad pad-slim" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={picked.name}>
+            <button type="button" className="pad-close" aria-label="关闭" onClick={() => setPicked(null)}>
+              ✕
+            </button>
             <h2>{picked.name}</h2>
-            <div className="row pad-ops">
-              <button type="button" className="danger pad-huge" onClick={() => markMiss(picked.id)}>
-                未完成
-              </button>
-              <button type="button" className="primary pad-huge" onClick={() => markBreak(picked.id)}>
-                特别突破
-              </button>
+            <div className="pad-split">
+              <div className="pad-miss-block">
+                <p className="pad-block-label">未完成</p>
+                <button type="button" className="danger pad-huge" onClick={() => markMiss(picked.id)}>
+                  记未完成
+                </button>
+              </div>
+              <div className="pad-break-block">
+                <p className="pad-block-label">特别突破</p>
+                <input
+                  className="pad-note"
+                  value={breakNote}
+                  onChange={(e) => setBreakNote(e.target.value)}
+                  maxLength={24}
+                  placeholder="写一句备注（有证据可留空）"
+                  aria-label="特别突破备注"
+                />
+                <button type="button" className="primary pad-huge" onClick={() => markBreak(picked.id)}>
+                  记特别突破
+                </button>
+              </div>
             </div>
-            <input
-              className="pad-note"
-              value={breakNote}
-              onChange={(e) => setBreakNote(e.target.value)}
-              maxLength={24}
-              placeholder="特别突破可写一句（有证据可留空）"
-              aria-label="特别突破备注"
-            />
+            {lastSeatAction() && (
+              <button
+                type="button"
+                className="undo-seat"
+                onClick={() => {
+                  const e = undoLastSeatAction()
+                  if (e) showToast(e, 'err')
+                  else showToast('已撤销上一步座位操作', 'ok')
+                }}
+              >
+                撤销上一步
+              </button>
+            )}
           </div>
         </div>
       )}

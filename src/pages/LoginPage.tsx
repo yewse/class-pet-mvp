@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Role } from '../types'
-import { login } from '../store'
+import { lastLogin, login } from '../store'
 
 const ROLES: { id: Role; label: string; hint: string }[] = [
   { id: 'homeroom', label: '班主任', hint: '叶老师' },
@@ -9,14 +9,15 @@ const ROLES: { id: Role; label: string; hint: string }[] = [
 ]
 
 export function LoginPage() {
-  const [role, setRole] = useState<Role>('student')
-  const [name, setName] = useState('林小舟')
+  const remembered = lastLogin()
+  const [role, setRole] = useState<Role>(remembered?.role ?? 'student')
+  const [name, setName] = useState(remembered?.name ?? '林小舟')
   const [err, setErr] = useState<string | null>(null)
 
   return (
     <div className="card login-card">
       <h1>班级宠物养成</h1>
-      <p className="muted">初二（3）班 · 离线演示登入（点角色即可带入示例姓名）</p>
+      <p className="meta-copy">初二（3）班 · 离线演示登入（点角色即可带入示例姓名）</p>
       <div className="role-cards">
         {ROLES.map((r) => (
           <button

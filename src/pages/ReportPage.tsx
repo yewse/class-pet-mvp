@@ -28,7 +28,7 @@ export function ReportPage({ state, studentId }: { state: AppState; studentId: s
     <div className="grid2">
       <div className="card">
         <h2>申报</h2>
-        <p className="muted">
+        <p className="meta-copy">
           今日 {used}/{DAILY_REPORT_CAP}（仅计本账号） · 考试名次不加分
         </p>
         <div className="row wrap">
@@ -38,8 +38,18 @@ export function ReportPage({ state, studentId }: { state: AppState; studentId: s
             </button>
           ))}
         </div>
-        <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="文字证据（必填）" rows={4} />
-        {msg && <p className={ok ? 'ok' : 'err'}>{msg}</p>}
+        <textarea
+          className={msg && !ok ? 'field-err' : ''}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value)
+            if (msg && !ok) setMsg(null)
+          }}
+          placeholder="文字证据（必填）"
+          rows={4}
+          aria-invalid={!!(msg && !ok)}
+        />
+        {msg && <p className={ok ? 'ok' : 'field-err-msg'}>{msg}</p>}
         <button
           className="primary"
           disabled={!canSubmit(state, studentId, today)}
@@ -71,7 +81,7 @@ export function ReportPage({ state, studentId }: { state: AppState; studentId: s
       </div>
       <div className="card">
         <h2>匿名互评</h2>
-        <p className="muted">
+        <p className="meta-copy">
           今日 {reviewsToday(state, studentId, today)}/{DAILY_REVIEW_CAP} · 不见评者
         </p>
         {pool.length === 0 && <p>暂无待评</p>}

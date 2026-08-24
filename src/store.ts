@@ -379,6 +379,7 @@ export function resetDemo() {
 export function login(role: AppState['users'][0]['role'], name: string): string | null {
   const u = state.users.find((x) => x.role === role && x.name === name.trim())
   if (!u) return '姓名与角色不匹配。演示：叶老师 / 王老师 / 林小舟'
+  rememberLogin(u.role, u.name)
   set({ ...state, session: { userId: u.id, viewClassId: ONLY_CLASS } })
   return null
 }
@@ -419,7 +420,31 @@ export function leaveClassWipe(studentId: string) {
   return null
 }
 
+const LAST_LOGIN_KEY = 'class-pet-last-login'
+
+export function rememberLogin(role: Role, name: string) {
+  try {
+    sessionStorage.setItem(LAST_LOGIN_KEY, JSON.stringify({ role, name }))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function lastLogin(): { role: Role; name: string } | null {
+  try {
+    const raw = sessionStorage.getItem(LAST_LOGIN_KEY)
+    if (!raw) return null
+    const v = JSON.parse(raw) as { role?: Role; name?: string }
+    if (v.role && v.name) return { role: v.role, name: v.name }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
 export function logout() {
+  const u = sessionUser()
+  if (u) rememberLogin(u.role, u.name)
   set({ ...state, session: null })
 }
 
@@ -1186,11 +1211,53 @@ export function markClassBaseDone(): string | null {
   return added ? `已记 ${added} 人今日基础达标` : '今日基础已记过，或全员为例外'
 }
 
+type LastSeatSnap = {
+  baseHabits: AppState['baseHabits']
+  classOkr: AppState['classOkr']
+  krTicks: AppState['krTicks']
+  personalOkrs: AppState['personalOkrs']
+  pets: AppState['pets']
+}
+
+let lastSeat: LastSeatSnap | null = null
+
+function snapSeat() {
+  lastSeat = {
+    baseHabits: state.baseHabits,
+    classOkr: state.classOkr,
+    krTicks: state.krTicks,
+    personalOkrs: state.personalOkrs,
+    pets: state.pets,
+  }
+}
+
+export function lastSeatAction(): LastSeatSnap | null {
+  return lastSeat
+}
+
+export function undoLastSeatAction(): string | null {
+  const denied = requireStaff()
+  if (denied) return denied
+  if (!lastSeat) return '没有可撤销的座位操作'
+  const snap = lastSeat
+  lastSeat = null
+  set({
+    ...state,
+    baseHabits: snap.baseHabits,
+    classOkr: snap.classOkr,
+    krTicks: snap.krTicks,
+    personalOkrs: snap.personalOkrs,
+    pets: snap.pets,
+  })
+  return null
+}
+
 export function excludeStudentBase(studentId: string): string | null {
   const denied = requireStaff()
   if (denied) return denied
   const u = state.users.find((x) => x.id === studentId)
   if (!u || u.role !== 'student') return '只能标记学生'
+  snapSeat()
   const today = todayStr(state)
   const week = weekIdOf(state)
   const habits = [...(state.baseHabits ?? [])]
@@ -1216,6 +1283,7 @@ export function confirmBreakthrough(studentId: string, note: string): string | n
   if (denied) return denied
   const u = state.users.find((x) => x.id === studentId)
   if (!u || u.role !== 'student') return '只能给学生记特别突破'
+  snapSeat()
   const pending = pendingTicksOf(state, studentId)
   if (pending.length) return confirmKrTick(pending[0].id, staffConfirmerId())
   const n = note.trim()

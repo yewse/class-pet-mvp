@@ -19,7 +19,7 @@ export function ShopPage({ state, studentId }: { state: AppState; studentId: str
     <div className="card">
       <h2>商城</h2>
       <p className="shop-balance">养成积分 {pts}</p>
-      <p className="muted">普通皮肤可兑换。稀有皮肤与课桌垫坐骑仅成就/周赛解锁，不可购买。禁止付费与赠送。</p>
+      <p className="meta-copy">普通皮肤可兑换。稀有皮肤与课桌垫坐骑仅成就/周赛解锁，不可购买。禁止付费与赠送。</p>
       <div className="grid3">
         {SHOP_ITEMS.map((it) => {
           const owned = have.includes(it.id)
@@ -28,7 +28,7 @@ export function ShopPage({ state, studentId }: { state: AppState; studentId: str
           return (
             <div key={it.id} className={`item ${unaffordable ? 'unaffordable' : ''}`}>
               <strong>{it.name}</strong>
-              <div className="muted">
+              <div className="meta-copy">
                 {it.kind === 'mount' ? '坐骑' : '皮肤'} · {it.cost} 分 {it.rare ? '· 稀有' : ''}
               </div>
               {owned ? (
@@ -36,7 +36,7 @@ export function ShopPage({ state, studentId }: { state: AppState; studentId: str
                   装备
                 </button>
               ) : lockedRare ? (
-                <span className="muted">
+                <span className="meta-copy">
                   {pts < it.cost ? `再攒 ${it.cost - pts} 分解锁` : '成就/周赛解锁'}
                 </span>
               ) : (
@@ -48,7 +48,7 @@ export function ShopPage({ state, studentId }: { state: AppState; studentId: str
           )
         })}
       </div>
-      <p className="muted gift-note">赠送：禁止赠送</p>
+      <p className="meta-copy gift-note">赠送：禁止赠送</p>
     </div>
   )
 }

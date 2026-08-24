@@ -43,6 +43,7 @@ export function HomePage({
   const okr = personalOkrOf(state, studentId)
   const [myO, setMyO] = useState(okr.objective)
   const [note, setNote] = useState('')
+  const [tickErr, setTickErr] = useState<string | null>(null)
   const locked = isClassHourLocked(state, studentId)
   const minePending = pendingTicksOf(state, studentId)
   const peerPending = pendingTicksOf(state).filter((k) => k.studentId !== studentId)
@@ -72,6 +73,7 @@ export function HomePage({
         clothesId={pet.clothesId}
         shoesId={pet.shoesId}
         mountId={pet.mountId}
+        allowSkipNow
         onDone={() => setReplay(false)}
       />
     )
@@ -182,6 +184,7 @@ export function HomePage({
             onSubmit={(e) => {
               e.preventDefault()
               const err = submitKrTick(studentId, note)
+              setTickErr(err)
               showToast(err ?? '已打钩，待同学或老师确认')
               if (!err) setNote('')
             }}
@@ -189,12 +192,18 @@ export function HomePage({
             <label>
               勾选本周关键结果（须写一句证据）
               <input
+                className={tickErr ? 'field-err' : ''}
                 value={note}
-                onChange={(e) => setNote(e.target.value)}
+                onChange={(e) => {
+                  setNote(e.target.value)
+                  if (tickErr) setTickErr(null)
+                }}
                 maxLength={24}
                 placeholder="例如：订正本第3页做完"
                 aria-label="关键结果证据"
+                aria-invalid={!!tickErr}
               />
+              {tickErr && <p className="field-err-msg">{tickErr}</p>}
             </label>
             <button type="submit" className="primary">打钩</button>
           </form>
@@ -235,14 +244,14 @@ export function HomePage({
         </p>
         {!readonly && (
           <div className="row">
-            <button type="button" disabled={locked} onClick={() => care(() => tapPet(studentId), '轻点')}>
-              轻点 0
+            <button type="button" className={locked ? 'care-later' : ''} onClick={() => care(() => tapPet(studentId), '轻点')}>
+              {locked ? '轻点 · 课后可用' : '轻点 0'}
             </button>
-            <button type="button" disabled={locked} onClick={() => care(() => petPet(studentId), '抚摸')}>
-              抚摸 0
+            <button type="button" className={locked ? 'care-later' : ''} onClick={() => care(() => petPet(studentId), '抚摸')}>
+              {locked ? '抚摸 · 课后可用' : '抚摸 0'}
             </button>
-            <button type="button" disabled={locked} onClick={() => care(() => feedPet(studentId), '喂食')}>
-              喂食 0
+            <button type="button" className={locked ? 'care-later' : ''} onClick={() => care(() => feedPet(studentId), '喂食')}>
+              {locked ? '喂食 · 课后可用' : '喂食 0'}
             </button>
             <button type="button" className="secondary" onClick={() => setReplay(true)}>
               再看领养

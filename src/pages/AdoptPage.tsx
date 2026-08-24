@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { AdoptCeremony } from '../components/AdoptCeremony'
 import { PetSvg } from '../components/PetSvg'
 import { BASE_PETS, COSMETICS, cosmeticsOf } from '../catalog'
-import { adopt, adoptCost, balance, petDisplayName, updateFace, validateMotto, validatePetName } from '../store'
+import { adopt, adoptCost, balance, petDisplayName, validateMotto, validatePetName } from '../store'
 import type { FacePreset } from '../types'
 import type { AppState } from '../types'
 
@@ -91,23 +91,14 @@ export function AdoptPage({
   if (existing) {
     return (
       <div className="card">
-        <h2>装扮微调</h2>
-        <p className="muted">已领养，装扮在领养时锁定。</p>
+        <h2>已领养</h2>
+        <p className="meta-copy">每人一只。装扮在领养时锁定。回主页点「再看领养」可重看仪式。</p>
         {preview}
         <p>
           宠物名 <strong>{petDisplayName(existing)}</strong>
         </p>
-        <p className="muted">{existing.motto}</p>
-        <button
-          className="primary"
-          onClick={() => {
-            updateFace(studentId, face, existing.species)
-            setMsg('已保存')
-          }}
-        >
-          已领养（可回主页再看仪式）
-        </button>
-        {msg && <p className="muted">{msg}</p>}
+        <p className="meta-copy">{existing.motto}</p>
+        {msg && <p className="meta-copy">{msg}</p>}
       </div>
     )
   }
