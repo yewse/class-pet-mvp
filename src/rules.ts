@@ -24,7 +24,7 @@ export function addDays(iso: string, n: number): string {
 
 export function dayEarn(state: AppState, studentId: string, date: string): number {
   return state.ledger
-    .filter((l) => l.studentId === studentId && l.date === date && l.kind === 'earn')
+    .filter((l) => l.studentId === studentId && l.date === date && l.kind === 'earn' && !l.reason.startsWith('超时有效入账'))
     .reduce((s, l) => s + l.delta, 0)
 }
 
@@ -50,7 +50,7 @@ export function canSpend(state: AppState, studentId: string, date: string, amoun
 
 export function reportsToday(state: AppState, authorId: string, date: string): number {
   if (!authorId) return 0
-  return state.reports.filter((r) => r.authorId === authorId && r.date === date).length
+  return state.reports.filter((r) => r.authorId === authorId && r.date === date && r.status !== 'rejected').length
 }
 
 export function reviewsToday(state: AppState, reviewerId: string, date: string): number {
@@ -109,16 +109,14 @@ export function autoCreditTimedOut(state: AppState): AppState {
   const reports = state.reports.map((r) => {
     if (r.credited) return r
     if (r.status !== 'queued' && r.status !== 'in_review') return r
-    const valid = r.peerDoubts === 0 && r.peerFacts > 0
-    if (!valid) return r
-    const day = r.queuedAt ?? r.submittedAt.slice(0, 10)
+    if (r.peerDoubts > 0) return r
+    const day = (r.queuedAt ?? r.submittedAt.slice(0, 10))
     if (day >= today) return r
     const pts = CATEGORY_POINTS[r.category]
-    if (!canEarn({ ...state, ledger }, r.authorId, today, pts)) return r
     const entry: LedgerEntry = {
       id: `auto-${r.id}`,
       studentId: r.authorId,
-      date: today,
+      date: day,
       delta: pts,
       kind: 'earn',
       reason: `超时有效入账 · ${categoryLabel(r.category)}`,
@@ -140,8 +138,17 @@ export function honorWeekStreak(honors: { studentId: string; weekId: string }[],
   return streak
 }
 
-export function honorAllowed(honors: { studentId: string; weekId: string }[], studentId: string): boolean {
-  if (honors.length >= HONOR_WALL_MAX) return false
+export function honorsInWeek(honors: { studentId: string; weekId: string }[], weekId: string): number {
+  return honors.filter((h) => h.weekId === weekId).length
+}
+
+export function honorAllowed(
+  honors: { studentId: string; weekId: string }[],
+  studentId: string,
+  weekId?: string,
+): boolean {
+  if (weekId && honorsInWeek(honors, weekId) >= HONOR_WALL_MAX) return false
+  if (!weekId && honors.length >= HONOR_WALL_MAX) return false
   return honorWeekStreak(honors, studentId) < HONOR_STREAK_MAX
 }
 
@@ -187,6 +194,7 @@ function careDates(state: AppState, studentId: string): Set<string> {
   const pet = petOf(state, studentId)
   if (pet?.lastCareDate) dates.add(pet.lastCareDate)
   if (pet?.lastCareGrowthDate) dates.add(pet.lastCareGrowthDate)
+  if (pet?.lastCareAt) dates.add(pet.lastCareAt.slice(0, 10))
   for (const l of state.ledger) {
     if (l.studentId !== studentId || l.kind !== 'spend') continue
     if (l.reason.includes('抚摸') || l.reason.includes('喂食') || l.reason.includes('照料')) {
@@ -328,13 +336,62 @@ export function studentHasGold(state: AppState, studentId: string): boolean {
   })
 }
 
+export function isPostedReport(status: Report['status']): boolean {
+  return status === 'posted' || status === 'auto_posted'
+}
+
 export function hasLearnLoop(state: AppState, studentId: string): boolean {
   const today = todayStr(state)
   const days = Array.from({ length: 7 }, (_, i) => addDays(today, -i))
   const cats = new Set(
-    reportsIn(state, studentId, days).map((r) => r.category),
+    reportsIn(state, studentId, days)
+      .filter((r) => isPostedReport(r.status))
+      .map((r) => r.category),
   )
   return cats.has('quality') && cats.has('correction') && cats.has('quiz_self')
+}
+
+export type GrowthStage = '幼' | '少' | '成'
+
+export function growthStage(growth: number): GrowthStage {
+  if (growth < 20) return '幼'
+  if (growth < 48) return '少'
+  return '成'
+}
+
+export function nowMs(state: AppState): number {
+  return state.now ?? Date.now()
+}
+
+export function hoursSinceCare(pet: Pet, state: AppState): number {
+  const stamp = pet.lastCareAt || (pet.lastCareDate ? `${pet.lastCareDate}T12:00:00` : null)
+  if (!stamp) return 18
+  const h = (nowMs(state) - new Date(stamp).getTime()) / 3600000
+  return Math.max(0, h)
+}
+
+/** 饱食这里表示「想念值」：越久没照料越高；照料会清零。 */
+export function liveHunger(pet: Pet, state: AppState): number {
+  return Math.min(100, Math.round(hoursSinceCare(pet, state) * 5))
+}
+
+export function lifeExpression(pet: Pet, state: AppState): Pet['expression'] {
+  const hunger = liveHunger(pet, state)
+  if (hunger >= 16) return 'missSoft'
+  if (pet.mood >= 72) return 'happy'
+  if (pet.mood < 36) return 'calm'
+  return pet.expression === 'cheer' || pet.expression === 'happy' || pet.expression === 'shy'
+    ? pet.expression
+    : 'idle'
+}
+
+export function petMissCopy(pet: Pet, state: AppState): string | null {
+  return liveHunger(pet, state) >= 16 ? '有点想你' : null
+}
+
+export function withPetLife(pet: Pet, state: AppState): Pet {
+  const hunger = liveHunger(pet, state)
+  return { ...pet, hunger, expression: lifeExpression(pet, state) }
 }
 
 export function earnedAchievements(state: AppState, studentId: string): string[] {

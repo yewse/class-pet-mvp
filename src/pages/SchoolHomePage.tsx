@@ -9,7 +9,8 @@ const DEMO_LEAVE_ID = 's4'
 export function SchoolHomePage({ state }: { state: AppState }) {
   const today = todayStr(state)
   const week = weekRange(today, 0)
-  const honors = state.honors.slice(-HONOR_WALL_MAX)
+  const weekId = state.activeWeek
+  const honors = state.honors.filter((h) => h.weekId === weekId).slice(-HONOR_WALL_MAX)
   const demo = state.users.find((u) => u.id === DEMO_LEAVE_ID)
   const demoPet = state.pets.find((p) => p.ownerId === DEMO_LEAVE_ID)
   const [note, setNote] = useState<string | null>(null)

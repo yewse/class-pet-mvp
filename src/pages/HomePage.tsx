@@ -19,7 +19,7 @@ import {
 } from '../store'
 import { DAILY_EARN_CAP, DAILY_SPEND_CAP, ITEM_LABEL, MOOD_LABEL, REFLECT_CHIP, displayLedgerReason } from '../types'
 import type { MoodId } from '../types'
-import { ACHIEVEMENTS, dayEarn, daySpendAbs, isClassHourLocked, todayStr } from '../rules'
+import { ACHIEVEMENTS, dayEarn, daySpendAbs, growthStage, isClassHourLocked, petMissCopy, todayStr } from '../rules'
 import { showToast } from '../toast'
 import type { AppState as S } from '../types'
 
@@ -83,12 +83,13 @@ export function HomePage({
     <div className="card home-card">
       <div className="home-pet">
         <h2>
-          <span className="muted">成长 {pet.growth}</span>
+          <span className="muted">成长 {pet.growth} · {growthStage(pet.growth)}</span>
         </h2>
         <PetSvg
           species={pet.species}
           face={pet.face}
           expression={pet.expression}
+          growth={pet.growth}
           skinId={pet.skinId}
           mountId={pet.mountId}
           paletteId={pet.paletteId}
@@ -104,7 +105,8 @@ export function HomePage({
       </div>
       <div className="home-meta">
         <p>
-          心情 {pet.mood} · 饱食 {pet.hunger} · 养成积分 {balance(state, studentId)}
+          心情 {pet.mood} · 想念 {pet.hunger} · 养成积分 {balance(state, studentId)}
+          {petMissCopy(pet, state) ? ` · ${petMissCopy(pet, state)}` : ''}
         </p>
         {!readonly && (
           <div className="row mood-row">
@@ -206,11 +208,11 @@ export function HomePage({
             <button type="button" disabled={locked} onClick={() => care(() => tapPet(studentId), '轻点')}>
               轻点 0
             </button>
-            <button type="button" disabled={locked} onClick={() => care(() => petPet(studentId), '摸头 −2')}>
-              抚摸 −2
+            <button type="button" disabled={locked} onClick={() => care(() => petPet(studentId), '抚摸')}>
+              抚摸 0
             </button>
-            <button type="button" disabled={locked} onClick={() => care(() => feedPet(studentId), '喂食 −2')}>
-              喂食 −2
+            <button type="button" disabled={locked} onClick={() => care(() => feedPet(studentId), '喂食')}>
+              喂食 0
             </button>
             <button type="button" className="secondary" onClick={() => setReplay(true)}>
               再看领养

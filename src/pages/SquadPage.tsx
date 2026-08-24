@@ -56,10 +56,10 @@ export function SquadPage({ state, meId, isTeacher }: { state: AppState; meId: s
         )}
       </div>
       <div className="card">
-        <h2>荣誉橱窗 ≤{HONOR_WALL_MAX}</h2>
-        <p className="muted">同一人连续上墙不超过 2 周</p>
+        <h2>本周荣誉橱窗 ≤{HONOR_WALL_MAX}</h2>
+        <p className="muted">上限按本周计，同一人连续上墙不超过 2 周</p>
         <ol>
-          {state.honors.map((h) => (
+          {state.honors.filter((h) => h.weekId === week).map((h) => (
             <li key={h.id}>
               {h.weekId} {state.users.find((u) => u.id === h.studentId)?.name} · {h.label}
             </li>

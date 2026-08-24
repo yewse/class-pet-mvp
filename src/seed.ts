@@ -35,6 +35,7 @@ function pet(
     growth: 16 + n * 8,
     lastCareDate: '2026-08-23',
     lastCareGrowthDate: '2026-08-23',
+    lastCareAt: n === 3 ? '2026-08-22T08:00:00' : '2026-08-23T20:00:00',
     skinId: n % 2 === 0 ? 'skin_basic_leaf' : 'skin_basic_cloud',
     mountId: n === 0 ? MOUNT_ID : null,
     headwearId: n === 0 ? 'hw_leaf' : 'hw_bow',
@@ -284,6 +285,7 @@ export function createSeed(): AppState {
     session: null,
     todayOverride: today,
     classScores: { s1: 0, s2: 0, s3: 0, s4: 0 },
+    classScoreWeek: week,
     personalOkrs: {
       s1: { weekId: week, objective: '本周订正全做完', krTarget: DEFAULT_KR_TARGET, krDone: 2, lastTickDate: '2026-08-23' },
       s2: { weekId: week, objective: '晚自习专注四次', krTarget: DEFAULT_KR_TARGET, krDone: 1, lastTickDate: null },

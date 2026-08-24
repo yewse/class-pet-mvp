@@ -22,17 +22,20 @@ import {
   earnedAchievements,
   ensureAuditSize,
   honorAllowed,
+  honorsInWeek,
   isClassHourLocked,
+  nowMs,
   squadTier,
   todayStr,
   weekIdFromDate,
   weekIdOf,
   weekSchoolDaysSoFar,
+  withPetLife,
 } from './rules'
 import type { HonorItem, HonorTier } from './types'
 
-const KEY = 'class-pet-mvp-v11'
-const OLD_KEYS = ['class-pet-mvp-v10', 'class-pet-mvp-v9']
+const KEY = 'class-pet-mvp-v12'
+const OLD_KEYS = ['class-pet-mvp-v11', 'class-pet-mvp-v10', 'class-pet-mvp-v9']
 
 const ONLY_CLASS = 'c1'
 
@@ -74,6 +77,7 @@ function normalizePet(p: Pet): Pet {
     name,
     nickname: name,
     motto,
+    lastCareAt: p.lastCareAt || (p.lastCareDate ? `${p.lastCareDate}T12:00:00` : null),
   }
 }
 
@@ -223,8 +227,14 @@ function migrate(s: AppState): AppState {
   for (const p of seed.pets) {
     if (!pets.some((x) => x.ownerId === p.ownerId)) pets = [...pets, normalizePet(p)]
   }
+  const week = weekIdOf(s)
   const classScores: Record<string, number> = {}
+  const sameScoreWeek = (s.classScoreWeek ?? week) === week
   for (const id of studentIds) {
+    if (!sameScoreWeek) {
+      classScores[id] = 0
+      continue
+    }
     const saved = s.classScores?.[id]
     classScores[id] = typeof saved === 'number' ? saved : (seed.classScores?.[id] ?? 0)
   }
@@ -245,6 +255,7 @@ function migrate(s: AppState): AppState {
     activeWeek: s.activeWeek ?? seed.activeWeek,
     lastSettledWeek: s.lastSettledWeek === undefined ? seed.lastSettledWeek : s.lastSettledWeek,
     classScores,
+    classScoreWeek: week,
     personalOkrs: s.personalOkrs ?? seed.personalOkrs,
     classOkr: s.classOkr ?? seed.classOkr,
     classSession: s.classSession ?? seed.classSession,
@@ -277,8 +288,15 @@ function ensureSized(s: AppState): AppState {
   return { ...s, reports: ensureAuditSize(s.reports, s.users) }
 }
 
+function tickPets(s: AppState): AppState {
+  return {
+    ...s,
+    pets: s.pets.map((p) => withPetLife(p, s)),
+  }
+}
+
 function boot(s: AppState): AppState {
-  return applyAchievements(maybeAutoSettle(autoCreditTimedOut(ensureSized(s))))
+  return tickPets(applyAchievements(maybeAutoSettle(autoCreditTimedOut(ensureSized(s)))))
 }
 
 let state: AppState = load()
@@ -417,6 +435,7 @@ export function adopt(
     growth: 0,
     lastCareDate: null,
     lastCareGrowthDate: null,
+    lastCareAt: null,
     skinId: 'skin_basic_leaf',
     mountId: null,
     headwearId,
@@ -556,50 +575,38 @@ export function updateFace(ownerId: string, face: FacePreset, species?: SpeciesI
   })
 }
 
-function applyCare(ownerId: string, spend: number, reason: string, mood: number, hunger: number, expr: Expression) {
+function applyCare(ownerId: string, _spend: number, reason: string, mood: number, _hunger: number, expr: Expression) {
   if (isClassHourLocked(state, ownerId)) return '上课中，课后再照料'
   const today = todayStr(state)
-  if (spend > 0 && !canSpend(state, ownerId, today, spend)) {
-    return '今日消耗已达上限 6，或积分不足'
-  }
   const pet = state.pets.find((p) => p.ownerId === ownerId)
   if (!pet) return '还没有宠物'
   let growth = pet.growth
   let lastCareGrowthDate = pet.lastCareGrowthDate
-  if (spend > 0 && pet.lastCareGrowthDate !== today) {
+  if (pet.lastCareGrowthDate !== today) {
     growth += 8
     lastCareGrowthDate = today
   }
-  const ledger = [...state.ledger]
-  if (spend > 0) {
-    ledger.push({
-      id: uid('led'),
-      studentId: ownerId,
-      date: today,
-      delta: -spend,
-      kind: 'spend',
-      reason,
-    })
-  }
+  const at = new Date(nowMs(state)).toISOString()
   set(
     applyAchievements({
       ...state,
-      ledger,
       pets: state.pets.map((p) =>
         p.ownerId === ownerId
           ? {
               ...p,
               mood: Math.max(0, Math.min(100, p.mood + mood)),
-              hunger: Math.max(0, Math.min(100, p.hunger + hunger)),
+              hunger: 0,
               growth,
               lastCareDate: today,
               lastCareGrowthDate,
+              lastCareAt: at,
               expression: expr,
             }
           : p,
       ),
     }),
   )
+  void reason
   return null
 }
 
@@ -607,10 +614,10 @@ export function tapPet(ownerId: string) {
   return applyCare(ownerId, 0, '轻点', 2, 0, 'happy')
 }
 export function petPet(ownerId: string) {
-  return applyCare(ownerId, 2, '抚摸', 10, 0, 'shy')
+  return applyCare(ownerId, 0, '抚摸', 10, 0, 'shy')
 }
 export function feedPet(ownerId: string) {
-  return applyCare(ownerId, 2, '喂食', 6, 18, 'cheer')
+  return applyCare(ownerId, 0, '喂食', 6, 0, 'cheer')
 }
 
 export function submitReport(authorId: string, category: ReportCategory, evidence: string) {
@@ -677,7 +684,7 @@ export function teacherAudit(reportId: string, action: 'approve' | 'reject') {
       ref: reportId,
     })
   }
-  set({
+  set(applyAchievements({
     ...state,
     ledger,
     reports: state.reports.map((r) =>
@@ -689,7 +696,7 @@ export function teacherAudit(reportId: string, action: 'approve' | 'reject') {
           }
         : r,
     ),
-  })
+  }))
   return null
 }
 
@@ -803,7 +810,7 @@ function applyHonorForWeek(s: AppState, week: string): AppState {
     if (!team || !sw.honor) continue
     for (const sid of team.memberIds) {
       if (honors.some((h) => h.weekId === week && h.studentId === sid)) continue
-      if (!honorAllowed(honors, sid)) continue
+      if (!honorAllowed(honors, sid, week)) continue
       const item: HonorItem = {
         id: uid('h'),
         weekId: week,
@@ -852,13 +859,14 @@ function applyAchievements(s: AppState): AppState {
 }
 
 export function settleHonor(studentId: string, label: string) {
-  if (state.honors.length >= HONOR_WALL_MAX) return '荣誉橱窗最多 6 席'
-  if (!honorAllowed(state.honors, studentId)) {
+  const week = currentWeek()
+  if (honorsInWeek(state.honors, week) >= HONOR_WALL_MAX) return '本周荣誉橱窗最多 6 席'
+  if (!honorAllowed(state.honors, studentId, week)) {
     return `同一人连续上墙不得超过 ${HONOR_STREAK_MAX} 次`
   }
   set({
     ...state,
-    honors: [...state.honors, { id: uid('h'), weekId: currentWeek(), studentId, label }],
+    honors: [...state.honors, { id: uid('h'), weekId: week, studentId, label }],
   })
   return null
 }
@@ -1275,9 +1283,7 @@ export function adjustClassScore(studentId: string, delta: number, reason: strin
       p.ownerId === studentId ? { ...p, mood: Math.min(100, p.mood + 4), expression: 'cheer' as Expression } : p,
     )
   } else if (reason === '走神提醒') {
-    pets = pets.map((p) =>
-      p.ownerId === studentId ? { ...p, mood: Math.max(0, p.mood - 6), expression: 'tired' as Expression } : p,
-    )
+    /* 不公开减分、不把宠物画成疲惫惩罚 */
   }
   const deltas = { ...s.classSession!.deltas, [studentId]: (s.classSession!.deltas[studentId] ?? 0) + delta }
   set({
@@ -1325,4 +1331,11 @@ export function praiseWholeClass(reason = '全班表扬'): string | null {
   return null
 }
 
-export { SHOP_ITEMS, balance, BASE_PETS, COSMETICS, MOOD_LABEL }
+export function remindDistract(studentId: string): string | null {
+  const u = state.users.find((x) => x.id === studentId)
+  if (!u || u.role !== 'student') return '只能提醒学生'
+  return null
+}
+
+export { SHOP_ITEMS, balance, BASE_PETS, COSMETICS, MOOD_LABEL, honorsInWeek, withPetLife }
+export { growthStage, petMissCopy, liveHunger } from './rules'

@@ -95,6 +95,9 @@ function Mouth({ expr, x, y, line }: { expr: Expression; x: number; y: number; l
   if (expr === 'shy') {
     return <path d={`M${x - 4} ${y} q 4 3 8 0`} stroke={line} fill="none" strokeWidth="2" />
   }
+  if (expr === 'missSoft') {
+    return <path d={`M${x - 6} ${y + 1} q 6 4 12 0`} stroke={line} fill="none" strokeWidth="2" />
+  }
   if (expr === 'tired' || expr === 'dormant') {
     return <line x1={x - 5} y1={y} x2={x + 5} y2={y} stroke={line} strokeWidth="2" />
   }
@@ -249,7 +252,12 @@ export function PetSvg(props: {
   headwearId?: string
   clothesId?: string
   shoesId?: string
+  /** 养成积分成长点：幼 <20 / 少 <48 / 成 */
+  growth?: number
+  stage?: '幼' | '少' | '成'
 }) {
+  const stage = props.stage ?? (props.growth == null ? '成' : props.growth < 20 ? '幼' : props.growth < 48 ? '少' : '成')
+  const stageScale = stage === '幼' ? 0.72 : stage === '少' ? 0.88 : 1
   const c = mix(props.species, props.paletteId)
   const f = props.face
   const size = props.compact ? 132 : 196
@@ -274,9 +282,10 @@ export function PetSvg(props: {
       width={size}
       height={size}
       viewBox="0 0 200 200"
-      className={`pet-svg expr-${props.expression}${props.expression === 'dormant' ? ' pet-dormant' : ''}`}
+      className={`pet-svg expr-${props.expression} stage-${stage}${props.expression === 'dormant' ? ' pet-dormant' : ''}`}
       role="img"
-      aria-label={props.expression === 'dormant' ? '休眠宠物' : '班级宠物'}
+      data-stage={stage}
+      aria-label={props.expression === 'dormant' ? '休眠宠物' : `${stage}阶段班级宠物`}
       opacity={props.expression === 'dormant' ? 0.55 : 1}
     >
       {showMount && (
@@ -289,7 +298,7 @@ export function PetSvg(props: {
         </g>
       )}
 
-      <g className="layer-body pet-react">
+      <g className="layer-body pet-react" transform={`translate(100 128) scale(${stageScale}) translate(-100 -128)`}>
         {sp === 'fox' && (
           <>
             <ellipse cx="148" cy="132" rx="36" ry="16" fill={c.body} transform="rotate(28 148 132)" />
@@ -391,7 +400,7 @@ export function PetSvg(props: {
         )}
       </g>
 
-      <g className="layer-face pet-head">
+      <g className="layer-face pet-head" transform={`translate(100 86) scale(${stageScale}) translate(-100 -86)`}>
         {sp === 'fox' && (
           <>
             <g transform={`rotate(${-18 - earRot} 72 58)`}>

@@ -20,6 +20,7 @@ import {
   startClassSession,
   todayBaseOf,
 } from '../store'
+import { showToast } from '../toast'
 import { DEFAULT_CLASS_PERK } from '../types'
 import type { AppState, User } from '../types'
 
@@ -244,14 +245,10 @@ export function ClassroomBoard({ state }: { state: AppState }) {
                   <PetSvg
                     species={pet.species}
                     face={pet.face}
-                    expression={last && last.n > 0 ? 'cheer' : displayExpr(state, pet)}
-                    skinId={pet.skinId}
-                    mountId={pet.mountId}
+                    expression={displayExpr(state, pet) === 'dormant' ? 'dormant' : 'idle'}
+                    growth={pet.growth}
                     paletteId={pet.paletteId}
                     marking={pet.marking}
-                    headwearId={pet.headwearId}
-                    clothesId={pet.clothesId}
-                    shoesId={pet.shoesId}
                   />
                 ) : (
                   <div className="muted">尚未领养</div>
@@ -302,6 +299,15 @@ export function ClassroomBoard({ state }: { state: AppState }) {
               </button>
               <button type="button" className="primary" onClick={() => markBreak(picked.id)}>
                 特别突破
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  showToast(`已私下提醒 ${picked.name} 注意听讲`)
+                  setPicked(null)
+                }}
+              >
+                走神提醒
               </button>
             </div>
             <button type="button" onClick={() => setPicked(null)}>

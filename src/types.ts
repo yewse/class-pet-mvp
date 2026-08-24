@@ -93,6 +93,8 @@ export interface Pet {
   growth: number
   lastCareDate: string | null
   lastCareGrowthDate: string | null
+  /** ISO 时间；缺省时用 lastCareDate 正午估算 */
+  lastCareAt: string | null
   skinId: string
   mountId: string | null
   headwearId: string
@@ -193,8 +195,11 @@ export interface AppState {
   lastSettledWeek: string | null
   session: { userId: string; viewClassId?: string } | null
   todayOverride?: string
-  /** 兼容旧存档，不再作为大屏主角 */
+  /** 演示/测试时钟，毫秒 */
+  now?: number
+  /** 兼容旧存档，不再作为大屏主角；按周清零 */
   classScores: Record<string, number>
+  classScoreWeek?: string
   personalOkrs: Record<string, PersonalOkr>
   classOkr: ClassOkr
   classSession: ClassSession
