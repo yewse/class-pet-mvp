@@ -3,6 +3,7 @@ import { advanceWeek, currentWeek, settleCurrentWeek, settleHonor, squadCombo } 
 import type { AppState, HonorTier } from '../types'
 import { HONOR_WALL_MAX } from '../types'
 import { squadTier } from '../rules'
+import { showToast } from '../toast'
 
 function tierText(points: number, honor?: HonorTier): string {
   const t = honor ?? squadTier(points)
@@ -41,17 +42,26 @@ export function SquadPage({ state, meId, isTeacher }: { state: AppState; meId: s
                 {sw?.honor ? ` · 已结算${tierText(pts, sw.honor)}` : ''}
               </div>
               {myTeam?.id === sq.id && (
-                <button onClick={() => alert(squadCombo(sq.id) ?? '小队连携 +3')}>本周连携</button>
+                <button type="button" className="primary" onClick={() => {
+                  const e = squadCombo(sq.id)
+                  showToast(e ?? '小队连携 +3', e ? 'err' : 'ok')
+                }}>本周连携</button>
               )}
             </div>
           )
         })}
         {isTeacher && (
           <div className="row">
-            <button className="primary" onClick={() => alert(settleCurrentWeek() ?? '已按档位结算并写入荣誉橱窗')}>
+            <button className="primary" type="button" onClick={() => {
+              const e = settleCurrentWeek()
+              showToast(e ?? '已按档位结算并写入荣誉橱窗', e ? 'err' : 'ok')
+            }}>
               结算本周档位
             </button>
-            <button onClick={() => alert(advanceWeek())}>模拟进入下一周</button>
+            <button type="button" className="secondary" onClick={() => {
+              const e = advanceWeek()
+              showToast(e ?? '已进入下一周', e ? 'err' : 'ok')
+            }}>模拟进入下一周</button>
           </div>
         )}
       </div>
@@ -72,7 +82,8 @@ export function SquadPage({ state, meId, isTeacher }: { state: AppState; meId: s
               onClick={() => {
                 const sid =
                   state.users.find((u) => u.role === 'student' && (!viewClassId || u.classId === viewClassId))?.id ?? 's2'
-                alert(settleHonor(sid, label) ?? '已上墙')
+                const e = settleHonor(sid, label)
+                showToast(e ?? '已上墙', e ? 'err' : 'ok')
               }}
             >
               老师写入荣誉

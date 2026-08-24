@@ -720,18 +720,35 @@ export function peerReview(reviewerId: string, reportId: string, verdict: 'fact'
   return null
 }
 
-export function teacherAudit(reportId: string, action: 'approve' | 'reject') {
+type LastAudit = {
+  reportId: string
+  prevStatus: typeof state.reports[number]['status']
+  prevCredited: boolean
+  prevRejectNote?: string
+  ledgerId: string | null
+}
+
+let lastAudit: LastAudit | null = null
+
+export function lastTeacherAudit(): LastAudit | null {
+  return lastAudit
+}
+
+export function teacherAudit(reportId: string, action: 'approve' | 'reject', rejectNote?: string) {
   const denied = requireStaff()
   if (denied) return denied
   const today = todayStr(state)
   const report = state.reports.find((r) => r.id === reportId)
   if (!report || report.credited) return '无法处理'
+  if (action === 'reject' && !rejectNote?.trim()) return '驳回必须填写理由'
   const pts = CATEGORY_POINTS[report.category]
   let ledger = [...state.ledger]
+  let ledgerId: string | null = null
   if (action === 'approve') {
     if (!canEarn(state, report.authorId, today, pts)) return `该生日入账将超过 ${8} 分`
+    ledgerId = uid('led')
     ledger.push({
-      id: uid('led'),
+      id: ledgerId,
       studentId: report.authorId,
       date: today,
       delta: pts,
@@ -739,6 +756,13 @@ export function teacherAudit(reportId: string, action: 'approve' | 'reject') {
       reason: categoryLabel(report.category),
       ref: reportId,
     })
+  }
+  lastAudit = {
+    reportId,
+    prevStatus: report.status,
+    prevCredited: report.credited,
+    prevRejectNote: report.rejectNote,
+    ledgerId,
   }
   set(applyAchievements({
     ...state,
@@ -749,10 +773,36 @@ export function teacherAudit(reportId: string, action: 'approve' | 'reject') {
             ...r,
             status: action === 'approve' ? 'posted' : 'rejected',
             credited: action === 'approve',
+            rejectNote: action === 'reject' ? rejectNote!.trim() : r.rejectNote,
           }
         : r,
     ),
   }))
+  return null
+}
+
+export function undoTeacherAudit() {
+  const denied = requireStaff()
+  if (denied) return denied
+  if (!lastAudit) return '没有可撤销的操作'
+  const snap = lastAudit
+  const report = state.reports.find((r) => r.id === snap.reportId)
+  if (!report) return '无法撤销'
+  lastAudit = null
+  set({
+    ...state,
+    ledger: snap.ledgerId ? state.ledger.filter((l) => l.id !== snap.ledgerId) : state.ledger,
+    reports: state.reports.map((r) =>
+      r.id === snap.reportId
+        ? {
+            ...r,
+            status: snap.prevStatus,
+            credited: snap.prevCredited,
+            rejectNote: snap.prevRejectNote,
+          }
+        : r,
+    ),
+  })
   return null
 }
 

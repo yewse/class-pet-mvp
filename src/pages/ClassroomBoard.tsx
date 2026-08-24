@@ -20,10 +20,11 @@ import {
   startClassSession,
   todayBaseOf,
 } from '../store'
+import { auditQueue } from '../rules'
 import { showToast } from '../toast'
 import { DEFAULT_CLASS_PERK } from '../types'
 import type { AppState, User } from '../types'
-import { isHomeroomRole } from '../types'
+import { isHomeroomRole, isStaffRole } from '../types'
 
 type Fx = { id: number; studentId: string; kind: 'up' | 'down' | 'all'; n: number }
 
@@ -58,6 +59,9 @@ export function ClassroomBoard({ state }: { state: AppState }) {
 
   const actor = state.session ? state.users.find((u) => u.id === state.session!.userId) : undefined
   const homeroom = isHomeroomRole(actor?.role ?? '')
+  const staff = isStaffRole(actor?.role ?? '')
+  const pendingVerify = pendingTicksOf(state).length
+  const pendingAudit = auditQueue(state, cid).length
   const classOkr = classOkrOf(state)
   const classPct = classOkrProgress(state)
   const perk = classPerkOf(state)
@@ -78,7 +82,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
   function markAllBase() {
     const err = markClassBaseDone()
     if (err && !err.startsWith('已记')) {
-      window.alert(err)
+      showToast(err, "err")
       return
     }
     setShimmer(true)
@@ -91,7 +95,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
   function markMiss(studentId: string) {
     const err = excludeStudentBase(studentId)
     if (err) {
-      window.alert(err)
+      showToast(err, "err")
       return
     }
     burst(studentId, -1, 'down')
@@ -101,7 +105,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
   function markBreak(studentId: string) {
     const err = confirmBreakthrough(studentId, breakNote)
     if (err) {
-      window.alert(err)
+      showToast(err, "err")
       return
     }
     burst(studentId, 1, 'up')
@@ -112,7 +116,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
   function praise() {
     const err = praiseWholeClass('全班表扬')
     if (err) {
-      window.alert(err)
+      showToast(err, "err")
       return
     }
     setShimmer(true)
@@ -165,6 +169,14 @@ export function ClassroomBoard({ state }: { state: AppState }) {
         </div>
       </div>
 
+      {homeroom && (
+        <div className="today-ops-banner" aria-label="今日待办">
+          <span className="today-ops-label">今日</span>
+          <span>待核验 <strong>{pendingVerify}</strong></span>
+          <span>待抽查 <strong>{pendingAudit}</strong></span>
+        </div>
+      )}
+
       <div className="mood-mix">
         <span>班级心情</span>
         <span>晴 {mix.sun}</span>
@@ -190,7 +202,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
             onSubmit={(e) => {
               e.preventDefault()
               const err = grantClassPerk(perkDraft)
-              if (err) window.alert(err)
+              if (err) showToast(err, "err")
             }}
           >
             <label>
@@ -235,7 +247,7 @@ export function ClassroomBoard({ state }: { state: AppState }) {
               type="button"
               key={s.id}
               className={`board-card desk ${last?.kind === 'up' || last?.kind === 'all' ? 'fx-up' : ''} ${last?.kind === 'down' ? 'fx-down' : ''}`}
-              onClick={() => setPicked(s)}
+              onClick={() => staff && setPicked(s)}
             >
               <div className="board-name">{s.name}</div>
               <div className="board-pet-slot">
@@ -270,54 +282,26 @@ export function ClassroomBoard({ state }: { state: AppState }) {
         })}
       </div>
 
-      {picked && (
+      {picked && staff && (
         <div className="pad-mask" onClick={() => setPicked(null)}>
-          <div className="score-pad" onClick={(e) => e.stopPropagation()}>
-            <h2>例外 · {picked.name}</h2>
-            <p className="muted">
-              {personalOkrOf(state, picked.id).objective || '未设个人目标'} · 个人勾选{' '}
-              {personalOkrOf(state, picked.id).krDone}/{personalOkrOf(state, picked.id).krTarget}
-              （努力勾选，不是考试分）
-            </p>
-            {pendingTicksOf(state, picked.id).map((k) => (
-              <p key={k.id} className="pending-tag">待确认 · {k.note}</p>
-            ))}
-            <KrDots
-              done={personalOkrOf(state, picked.id).krDone}
-              target={personalOkrOf(state, picked.id).krTarget}
-            />
-            <p className="muted">
-              今日基础：{todayBaseOf(state, picked.id)?.status === 'done' ? '已达标' : todayBaseOf(state, picked.id)?.status === 'excluded' ? '未完成' : '未记'}
-            </p>
-            <label>
-              特别突破备注
-              <input
-                value={breakNote}
-                onChange={(e) => setBreakNote(e.target.value)}
-                maxLength={24}
-                placeholder="有证据可留空，否则写一句"
-              />
-            </label>
+          <div className="score-pad pad-slim" onClick={(e) => e.stopPropagation()}>
+            <h2>{picked.name}</h2>
             <div className="row pad-ops">
-              <button type="button" className="pad-minus" onClick={() => markMiss(picked.id)}>
+              <button type="button" className="danger pad-huge" onClick={() => markMiss(picked.id)}>
                 未完成
               </button>
-              <button type="button" className="primary" onClick={() => markBreak(picked.id)}>
+              <button type="button" className="primary pad-huge" onClick={() => markBreak(picked.id)}>
                 特别突破
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  showToast(`已私下提醒 ${picked.name} 注意听讲`)
-                  setPicked(null)
-                }}
-              >
-                走神提醒
-              </button>
             </div>
-            <button type="button" onClick={() => setPicked(null)}>
-              关闭
-            </button>
+            <input
+              className="pad-note"
+              value={breakNote}
+              onChange={(e) => setBreakNote(e.target.value)}
+              maxLength={24}
+              placeholder="特别突破可写一句（有证据可留空）"
+              aria-label="特别突破备注"
+            />
           </div>
         </div>
       )}

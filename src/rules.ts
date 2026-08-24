@@ -320,7 +320,7 @@ export function squadTier(points: number): 'gold' | 'silver' | 'bronze' | null {
 export const ACHIEVEMENTS = [
   { id: 'streak_mount', title: '三日照料', itemId: 'mount_deskpad_01', desc: '连续照料 3 天解锁课桌垫坐骑' },
   { id: 'weekly_gold', title: '周赛金档', itemId: 'skin_rare_week', desc: '小队周赛金档解锁周赛银辉（不可购买）' },
-  { id: 'learn_loop', title: '学习闭环', itemId: 'skin_rare_achieve', desc: '近 7 日作业质量、订正闭环、自测对照各至少一条' },
+  { id: 'learn_loop', title: '学习闭环', itemId: 'skin_rare_achieve', desc: '近 7 日作业质量、订正错题、自己测一次各至少一条' },
 ]
 
 export function studentHasGold(state: AppState, studentId: string): boolean {

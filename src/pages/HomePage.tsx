@@ -47,6 +47,13 @@ export function HomePage({
   const minePending = pendingTicksOf(state, studentId)
   const peerPending = pendingTicksOf(state).filter((k) => k.studentId !== studentId)
   const myMood = moodOf(state, studentId)
+  const [showCoach, setShowCoach] = useState(() => {
+    try {
+      return localStorage.getItem('class-pet-home-coach-v1') !== '1'
+    } catch {
+      return true
+    }
+  })
   if (!pet) {
     return <p>尚未领养，将进入领养。</p>
   }
@@ -81,6 +88,29 @@ export function HomePage({
 
   return (
     <div className="card home-card">
+      {showCoach && !readonly && (
+        <div className="home-coach">
+          <ol>
+            <li>定目标：写下本周想完成的一件事</li>
+            <li>打卡：做完就勾选，等同学或老师确认</li>
+            <li>免费照料：轻点、抚摸、喂食都不花积分</li>
+          </ol>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setShowCoach(false)
+              try {
+                localStorage.setItem('class-pet-home-coach-v1', '1')
+              } catch {
+                /* ignore */
+              }
+            }}
+          >
+            知道了
+          </button>
+        </div>
+      )}
       <div className="home-pet">
         <h2>
           <span className="muted">成长 {pet.growth} · {growthStage(pet.growth)}</span>

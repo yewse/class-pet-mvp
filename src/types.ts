@@ -129,6 +129,7 @@ export interface Report {
   queuedAt: string | null
   submittedAt: string
   credited: boolean
+  rejectNote?: string
 }
 
 export interface PeerReview {
@@ -305,8 +306,8 @@ export const CATEGORY_POINTS: Record<ReportCategory, number> = {
 
 export const CATEGORY_LABEL: Record<ReportCategory, string> = {
   quality: '作业质量',
-  correction: '订正闭环',
-  quiz_self: '自测对照',
+  correction: '订正错题',
+  quiz_self: '自己测一次',
   participation: '课堂参与',
 }
 
@@ -314,8 +315,8 @@ export const CATEGORY_LABEL: Record<ReportCategory, string> = {
 export const REASON_KEY_LABEL: Record<string, string> = {
   quality: '作业质量',
   participation: '课堂参与',
-  correction: '订正闭环',
-  quiz_self: '自测对照',
+  correction: '订正错题',
+  quiz_self: '自己测一次',
   exam_rank: '考试名次',
 }
 
@@ -330,6 +331,8 @@ export function displayLedgerReason(reason: string): string {
   for (const k of keys) {
     out = out.replace(new RegExp(`(?<![A-Za-z0-9_])${k}(?![A-Za-z0-9_])`, 'g'), REASON_KEY_LABEL[k])
   }
+  out = out.replace(/订正闭环/g, '订正错题')
+  out = out.replace(/自测对照/g, '自己测一次')
   return out
 }
 

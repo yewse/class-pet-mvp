@@ -11,7 +11,7 @@ import { RosterPage } from './pages/RosterPage'
 import { GoalsPage } from './pages/GoalsPage'
 import { VisitPage } from './pages/VisitPage'
 import { getState, logout, resetDemo, subscribe } from './store'
-import { subscribeToast } from './toast'
+import { subscribeToast, type ToastPayload } from './toast'
 import type { AppState } from './types'
 import { ROLE_ZH, isHomeroomRole, isStaffRole } from './types'
 
@@ -50,7 +50,7 @@ export default function App() {
     return u ? readSavedTab(u.id, u.role) : 'home'
   })
   const [ritualHold, setRitualHold] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<ToastPayload>(null)
 
   useEffect(() => subscribe(() => setState(getState())), [])
   useEffect(() => subscribeToast(setToast), [])
@@ -181,7 +181,11 @@ export default function App() {
         {tab === 'roster' && homeroom && <RosterPage state={state} />}
         {tab === 'goals' && homeroom && <GoalsPage state={state} />}
       </main>
-      {toast && <div className="app-toast" role="status">{toast}</div>}
+      {toast && (
+        <div className={`app-toast toast-${toast.kind}`} role="status">
+          {toast.text}
+        </div>
+      )}
     </div>
   )
 }
