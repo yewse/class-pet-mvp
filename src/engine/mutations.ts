@@ -53,6 +53,7 @@ import {
   honorAllowed,
   honorsInWeek,
   isClassHourLocked,
+  isPostedReport,
   nowMs,
   schoolDaysOfWeekId,
   squadTier,
@@ -196,10 +197,48 @@ function ensureSquadRows(s: AppState, week: string): AppState {
   return { ...s, squadWeeks: rows, activeWeek: week }
 }
 
+function autoCalculateSquadPoints(s: AppState, week: string): AppState {
+  const weekDays = schoolDaysOfWeekId(week)
+  const squadWeeks = s.squadWeeks.map((sw) => {
+    if (sw.weekId !== week) return sw
+    const team = s.squads.find((x) => x.id === sw.teamId)
+    if (!team) return sw
+    
+    let points = 0
+    
+    for (const sid of team.memberIds) {
+      const careDays = weekDays.filter((d) => {
+        const pet = s.pets.find((p) => p.ownerId === sid)
+        return pet?.lastCareDate === d || pet?.lastCareGrowthDate === d
+      }).length
+      points += careDays
+      
+      const correctionReports = s.reports.filter(
+        (r) => r.authorId === sid && r.category === 'correction' && weekDays.includes(r.date) && isPostedReport(r.status)
+      )
+      const retestReports = s.reports.filter(
+        (r) => r.authorId === sid && r.category === 'quiz_self' && weekDays.includes(r.date) && isPostedReport(r.status)
+      )
+      const closedLoops = Math.min(correctionReports.length, retestReports.length)
+      points += closedLoops
+      
+      const confirms = (s.krTicks ?? []).filter(
+        (k) => k.weekId === week && k.confirmerId === sid && k.status === 'confirmed'
+      ).length
+      points += confirms
+    }
+    
+    return { ...sw, points }
+  })
+  
+  return { ...s, squadWeeks }
+}
+
 function applyHonorForWeek(s: AppState, week: string): AppState {
   const cfg = rulesOf(s)
   const honors = [...s.honors]
-  const squadWeeks = s.squadWeeks.map((sw) => {
+  const withPoints = autoCalculateSquadPoints(s, week)
+  const squadWeeks = withPoints.squadWeeks.map((sw) => {
     if (sw.weekId !== week) return sw
     const honor = squadTier(sw.points, cfg) ?? undefined
     return { ...sw, honor }
@@ -536,9 +575,7 @@ export function submitReport(
   const ev = args.evidence.trim()
   if (ev.length < cfg.evidenceMinLen) return err(s, `证据至少 ${cfg.evidenceMinLen} 个字：写清楚做了什么`)
   if ((args.category as string) === 'exam_rank') return err(s, '考试名次不加分')
-  if (args.retestOf && !s.reports.some((r) => r.id === args.retestOf && r.authorId === authorId)) {
-    return err(s, '重测关联的申报不存在')
-  }
+  if (args.retestOf) return err(s, '重测功能暂时冻结')
   const report = {
     id: uid('rep'),
     authorId,
@@ -643,15 +680,7 @@ export function social(
   if (to.dnd) return err(s, '对方已开启免打扰')
   if (fromId === toId && type !== 'visit') return err(s, '不能对自己使用该互动')
   if (type === 'cotrain') {
-    if (s.visits.some((v) => v.date === today && v.type === 'cotrain' && (v.fromId === fromId || v.toId === fromId))) {
-      return err(s, '每人每天只能共训一次')
-    }
-    if (s.visits.some((v) => v.date === today && v.type === 'cotrain' && (v.fromId === toId || v.toId === toId))) {
-      return err(s, '对方今日已共训')
-    }
-    if (!canSpend(s, fromId, today, 2)) {
-      return err(s, '积分或今日消耗额度不足')
-    }
+    return err(s, '共训功能暂时冻结')
   }
   if (type === 'snack') {
     if (!canSpend(s, fromId, today, 2)) return err(s, '今日消耗已满或积分不足')
